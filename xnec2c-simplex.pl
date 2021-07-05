@@ -4,12 +4,12 @@ use lib 'lib';
 
 
 use NEC2;
-use NEC2::GW;
 
 use strict;
 use warnings;
 
 use PDL;
+use PDL::IO::CSV qw(rcsv1D);
 use PDL::Opt::Simplex;
 
 use Text::CSV;
@@ -61,6 +61,10 @@ my $vec = $vec_initial;
 #print $vec->slice("5:9");
 print "===== test ==== \n";
 print yagi($vec->slice("0:4"), $vec->slice("5:9"));
+save_yagi("yagi.nec", yagi($vec->slice("0:4"), $vec->slice("5:9")));
+print foreach (%{ load_csv("yagi.nec.csv") });
+exit;
+
 print "\n===== start ==== \n";
 #my $s = $simplex_init->slice("(2)");
 #print $s;
@@ -76,22 +80,75 @@ exit 0;
 # functions below here
 
 
-sub yagi {
-  my ($lengths, $spaces) = @_;
+sub yagi
+{
+	my ($lengths, $spaces) = @_;
 
 	print "lengths: $lengths\n";
 	print "spaces: $spaces\n";
-  my @ret;
-  for (my $i = 0; $i < 5; $i++)
-  {
-	push (@ret, NEC2::GW->new(tag => 1, ns => 11, 
-			x  =>  -$lengths->slice("($i)"),  x2  =>  $lengths->slice("($i)"),  
-			z  =>  $spaces->slice("($i)"),      z2  =>  $spaces->slice("($i)")
-			)
-	);
-  }
+	my @ret = (
+		NEC2::CM->new(comment => 'A yagi antenna'),
+		NEC2::CE->new() 
+		);
 
-  return @ret;
+	for (my $i = 0 ; $i < 5 ; $i++) {
+		my $l = unpdl($lengths->slice("($i)"))->[0];
+		my $s = unpdl($spaces->slice("($i)"))->[0];
+		push(
+			@ret,
+			NEC2::GW->new(
+				tag => $i+1,
+				ns  => 11,
+				x   => $l, x2  => -$l,
+				z   => $s, z2  => $s, 
+				rad => 0.002
+
+			)
+		);
+	}
+
+	push @ret, 
+		NEC2::GE->new(ground => 0),
+		NEC2::EX->new(ex_tag => 2, ex_segment => 6),
+		#NEC2::RP360->new(),
+
+		NEC2::RP180->new(),
+		NEC2::GN->new(type => 1),
+		NEC2::NH->new(),
+		NEC2::NE->new(),
+		NEC2::FR->new(mhz => $freq_min, mhz_inc => $freq_step, n_freq => $n_freq),
+		NEC2::EN->new()
+		;
+
+	return @ret;
+}
+
+sub save_yagi 
+{
+	my ($fn, @yagi) = @_;
+
+	open(my $yagi, "|column -t > $fn") or die "$!: $fn";
+
+	print $yagi @yagi;
+
+# Use this RP if there is a ground:
+# 	RP  0    19    37        1000  0        0     5       10     0       0
+# This with no ground:
+# 	RP  0  19       37  1000  0          0           10         10   0  0
+#GE  0  0        0   0     0          0           0          0    0
+#EX  0  $ex_tag  1   0     1          0           0          0    0  0
+#RP  0  19       37  1000  0          0           5          10   0  0
+#GN  1  0        0   0     0          0           0          0    0  0
+#NH  0  0        0   0     0          0           0          0    0  0
+#NE  0  10       1   10    -1.35      0           -1.35      0.3  0  0.3
+#FR  0  $n_freq  0   0     $freq_min  $freq_step  $freq_max  0    0  0
+#EN  0  0        0   0     0          0           0          0    0  0
+#  print $yagi qq{
+#};
+
+	close($yagi);
+
+sleep 2;
 }
 
 sub f
@@ -102,25 +159,11 @@ sub f
 
 	my $lengths = $vec->slice("0:4", 0);
 	my $spaces = $vec->slice("5:9", 0);
-	print "f: $vec\n";
 
-	print yagi($lengths, $spaces);
+	save_yagi("yagi.nec", yagi($lengths, $spaces));
 
-# Use this RP if there is a ground:
-# 	RP  0    19    37        1000  0        0     5       10     0       0
-# This with no ground:
-# 	RP  0  19       37  1000  0          0           10         10   0  0
-  print qq{
-GE  1  0        0   0     0          0           0          0    0
-EX  0  $ex_tag  1   0     1          0           0          0    0  0
-RP  0  19       37  1000  0          0           5          10   0  0
-NH  0  0        0   0     0          0           0          0    0  0
-NE  0  10       1   10    -1.35      0           -1.35      0.3  0  0.3
-GN  1  0        0   0     0          0           0          0    0  0
-FR  0  $n_freq  0   0     $freq_min  $freq_step  $freq_max  0    0  0
-EN  0  0        0   0     0          0           0          0    0  0
-};
-
+	# Whatever vector format $vec->slice("(0)") is, $ret must be also.
+	# So slice it, multiply times zero, and then add whatever you need:
 	my $ret = $vec->slice("(0)");
 	$ret *= 0;
 	$ret += rand;
@@ -138,9 +181,25 @@ sub log
 
 	my $x = $vec;
 
-	# each vector element passed to log() has a min and max value. 
+	# each vector element passed to log() has a min and max value.
 	# ie: x=[6 0] -> vals=[76 4]
 	# so, from above: f(6) == 76 and f(0) == 4
 
 	print "LOG $count [$ssize]: $x -> $vals\n";
+}
+
+sub load_csv
+{
+	my $fn = shift;
+	my @pdls = rcsv1D($fn, { header => 1 });
+
+	my %h;
+	foreach my $p (@pdls)
+	{
+		my $header = $p->hdr->{col_name};
+
+		$h{$p->hdr->{col_name}} = $p if $header;
+	}
+
+	return \%h;
 }
