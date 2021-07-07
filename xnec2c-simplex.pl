@@ -1,28 +1,27 @@
 #!/usr/bin/perl
 
-use lib 'lib';
-
-
-use NEC2;
-
 use strict;
 use warnings;
 
-use Linux::Inotify2;
+use lib 'lib';
+
+use NEC2;
 
 use PDL;
 use PDL::IO::CSV qw(rcsv1D);
 use PDL::Opt::Simplex;
 
-use Data::Dumper;
+use Linux::Inotify2;
 
-my $count = 0;
-
-# for RP tag:
+###################
+# For RP tag:
 my $freq_min = 130;
 my $freq_max = 160;
 my $n_freq = 100;
 my $freq_step = ($freq_max-$freq_min)/($n_freq-1);
+
+###################
+# NEC Geometry 
 
 # yagi dimensions from https://www.qsl.net/dk7zb/PVC-Yagis/5-Ele-2m.htm
 my $vec_initial = pdl 
@@ -52,7 +51,10 @@ my $tolerance = 1e-6;
 my $max_iter = 1000;
 
 
-# Goals: Freq-MHz, Z-real, Z-imag, Z-magn, Z-phase, VSWR, Gain-max, Gain-viewer
+###################
+# Goal Options
+
+# Available Goals: Freq-MHz, Z-real, Z-imag, Z-magn, Z-phase, VSWR, Gain-max, Gain-viewer
 my $goals = [
 	{ 
 		field => 'Gain-max',
@@ -293,6 +295,8 @@ sub log
 	# each vector element passed to log() has a min and max value.
 	# ie: x=[6 0] -> vals=[76 4]
 	# so, from above: f(6) == 76 and f(0) == 4
+
+	our $count = 0;
 
 	$count++;
 	print "\n\nLOG $count: $ssize > $tolerance, continuing.\n";
