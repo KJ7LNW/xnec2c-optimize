@@ -78,6 +78,18 @@ sub tagged
 	scalar(grep {ref($self) eq $_} map { "NEC2::$_" } qw/GA GH GW/);
 }
 
+sub save
+{
+	my ($fn, @structure) = @_;
+
+	open(my $structure, "|column -t > $fn") or die "$!: $fn";
+
+	print $structure @structure;
+
+	close($structure);
+}
+
+# Default card override functions
 sub params
 {
 	my $self = shift;
