@@ -12,11 +12,12 @@ use PDL::IO::CSV qw(rcsv1D);
 use PDL::Opt::Simplex;
 
 use Linux::Inotify2;
+use Data::Dumper;
 
 ###################
 # For RP tag:
-my $freq_min = 130;
-my $freq_max = 160;
+my $freq_min = 134;
+my $freq_max = 158;
 my $n_freq = 100;
 my $freq_step = ($freq_max-$freq_min)/($n_freq-1);
 
@@ -42,7 +43,7 @@ my $vec_initial = pdl
 # "Step size" but not really, a bigger value makes larger jumps
 # but the value doesn't translate to a unit.
 # (it actually stands for simplex size, it initializes the size of the simplex tetrahedron)
-my $ssize = 0.1;
+my $ssize = 0.075;
 
 # Conversion tolerance, exit optmizer when simplex isn't moving much:
 my $tolerance = 1e-6;
@@ -54,51 +55,124 @@ my $max_iter = 1000;
 ###################
 # Goal Options
 
-# Available Goals: Freq-MHz, Z-real, Z-imag, Z-magn, Z-phase, VSWR, Gain-max, Gain-viewer
+# field: the name of the field in the .csv.  
+#   Available fields: Freq-MHz, Z-real, Z-imag, Z-magn, Z-phase, VSWR, Gain-max, Gain-viewer, F/B Ratio
+#
+# enabled: 1 or 0 to enable/disable.  Not if enable is undefined then it defaults to enabled.
+#
+# mhz_min: The minimum frequency for which the goal applies
+# mhz_max: The maximum frequency for which the goal applies
+#
+# result: a subroutine (coderef) that is passed a measurement (and frequency) and returns the
+#         value that should be minimized.  The result should always return a smaller
+#         value when the it is closer to the goal because Simplex works to 
+#         find a minima.  The value can be negative.  The frequency being evaluated by the 
+#         result function could be used to scale the goal, for example, if the shape of the 
+#         goal should vary with frequency.  The name of the variables in the function do not
+#         matter, just know that the values being passed are that which is measured from 'field'
+#         and the 2nd argument is always the frequency in MHz being evaluated.
+#
+#         Once all goals are evaulated independantly for each measurement they are summed
+#         together.  Thus, it is important the the scale of one goal against another
+#         is similar.  If one goal swings the total sum of all goals too much then 
+#         the subtle (and possibly important) effects of a different goal will be lost 
+#         in the noise of the "louder" goal.  Work could be done here to normalize all
+#         goal results against eachother before summing them together.
+#
+#         For values like VSWR where lower values are better, you can
+#         penalize larger values by raising them to a power.  For example:
+#            result => sub { my ($swr,$mhz) = @_; return $swr**2; }
+#         This forces a flatter SWR curve because higher values are quadratically
+#         worse than lower values.
+#
+#         For values like gain where higher values are better, the value needs to be
+#         inverted for simplex.  The simplest way to do this is to make it negative:
+#            result => sub { my ($gain,$mhz) = @_; return -$gain; }
+#
+#         However you may also create a bias by raising it to a fractional power:
+#            result => sub { my ($gain,$mhz) = @_; return -$gain*0.5; }
+#         A higher power makes the max-gain higher because higher gains get a greater
+#         negative score, thus being "better" in terms of how Simplex evaluates it.
+#         A lower power makes a flater curve for the opposite reason.
+#
+#         You can also experiment with creating a synthetic goal and exponentiating
+#         the goal as a fraction.  For example:
+#            result => sub { my ($gain,$mhz) = @_; return $gain < 1 ? 100 : 2**(12/$gain); }
+#         This creates a "goal" of 12dB gain such that when the exponent reaches 12/12 it
+#         will evaluate as "2".  If gain is less than 12dB it will score exponentially
+#         worse.  This also has the effect of normalizing the result against the goal
+#         which makes the goals more even (you could also adjust the weights).
+#
+#
+#
+# type: aggregation type, what to do with of the return from result subroutine for each frequency.
+#       sum: add them together
+#       avg: add them together and divide by the count
+#       min: return the minimum from the set
+#       max: return the maximum from the set
+#       mag: take the vector magnitude: sum the square of each result and take the sqrt
+#
+# weight: Multiplicative weight, relative scale of the goal.  
+#         This weight is multiplied times the result of the aggregation type
 my $goals = [
 	{ 
 		field => 'Gain-max',
+		enabled => 1,
 		mhz_min => 144,
 		mhz_max => 148,
 
-		# Multiplicative weight, relative scale of the goal
-		weight => 10,
+		weight => 5,
+		
+		type => 'avg', 
 
 		# Simplex minimizes, so return a negative value and raise it to a power.
 		# A higher power makes the max-gain higher
 		# A lower power makes a flater curve
-		result => sub { my $gain = shift; return -$gain**1.5; }
+		#
+		#
+		# The (4-(146-$mhz)**2)**2 term attempts to maximize the gain at 146MHz by reducing
+		# the multiple as it moves away from center.
+		result => sub { my ($gain,$mhz)=@_; return -$gain**0.5 * (4-(146-$mhz)**2)**2; }
+		
+		# This result function exponentiates to the power of the target gain over current gain.
+		# It will tend toward a value of 1 as the target is exceeded.
+		#result => sub { my ($gain,$mhz)=@_; return $gain < 1 ? 100 : 2**(12/$gain); }
+
+		#result => sub { my ($gain,$mhz)=@_; return $gain < 1 ? 100 : (12/$gain); }
 
 	},
 
 	{ 
 		field => 'VSWR',
+		enabled => 1,
 		mhz_min => 144,
-		mhz_max => 148,
-
-		# Multiplicative weight, relative scale of the goal
-		weight => 3,
-
-		# The optmizer minimizes results, penalize swr quadratically:
-		# A larger power provides a flatter SWR
-		# A lower power reduces the strength of the SWR penalty.
-		result => sub { my $swr = shift; return $swr**3; }
-	},
-
-	{ 
-		# F/B Ratio doesn't seem to affect the optimization very much
-		# but it is a hint.
-		field => 'F/B Ratio',
-		mhz_min => 144,
-		mhz_max => 148,
+		mhz_max => 150,
 
 		# Multiplicative weight, relative scale of the goal
 		weight => 1,
 
-		# Simplex minimizes, so return a negative value and raise it to a power.
-		# A higher power makes the max higher
-		# A lower power makes the curve flatter.
-		result => sub { my $fb = shift; return -$fb**1.0; }
+		type => 'avg', # calculate minima by sum, avg, min, or max
+
+		# The optmizer minimizes results, penalize swr quadratically:
+		# A larger power provides a flatter SWR
+		# A lower power reduces the strength of the SWR penalty.
+		result => sub { my ($swr,$mhz)=@_; return $swr**2.0 * (4-(146-$mhz)**2)**2; }
+		
+		#result => sub { my ($swr,$mhz)=@_; return 2**$swr; }
+	},
+
+	{ 
+		field => 'F/B Ratio',
+		enabled => 0,
+		mhz_min => 145,
+		mhz_max => 146,
+
+		weight => 1,
+
+		type => 'avg', # calculate minima by sum, avg, min, max, or mag
+
+		#result => sub { my ($fb,$mhz)=@_; return 2**(20/$fb); }
+		result => sub { my ($fb,$mhz)=@_; return (20/$fb); }
 	},
 ];
 
@@ -109,10 +183,15 @@ my @yagi = yagi($vec_initial->slice("1:5"), $vec_initial->slice("6:10"));
 NEC2::save("yagi.nec", @yagi);
 print @yagi;
 
-print "\n=== Goal Status ===\n";
-my $csv = load_csv("yagi.nec.csv");
-foreach my $g (@$goals) {
-	goal_eval($csv, $g);
+if ( -e "yagi.nec.csv" ) {
+	print "\n=== Goal Status ===\n";
+	my $csv = load_csv("yagi.nec.csv");
+	foreach my $g (@$goals) {
+		# Default to enabled if undefined.
+		$g->{enabled} //= 1;
+		next if (!$g->{enabled});
+		goal_eval($csv, $g);
+	}
 }
 
 print "\nTurn on the optimizer and press enter to begin.\n";
@@ -139,39 +218,69 @@ exit 0;
 
 # functions below here
 
+# Globals for the functions:
+my $log_count = 0;
+
 sub goal_eval
 {
 	my ($csv, $goal) = @_;
 
 	# Find the index for the given frequency range:
+	my $mhz;
 	my $idx_min;
 	my $idx_max;
 	my $i = 0;
 	for ($i = 0; $i < nelem($csv->{'Freq-MHz'}); $i++)
 	{
-		my $mhz = $csv->{'Freq-MHz'}->slice("($i)");
+		$mhz = $csv->{'Freq-MHz'}->slice("($i)");
 		$idx_min = $i if ($mhz >= $goal->{mhz_min} && !$idx_min);
 		$idx_max = $i if ($mhz <= $goal->{mhz_max});
 	}
 
 	# $p contains the goal parameters in the frequency min/max that we are testing:
 	my $p = $csv->{$goal->{field}};
+	if (!defined($p))
+	{
+		die "Undefined field in CSV: $goal->{field}\n";
+	}
+
 	$p = $p->slice("$idx_min:$idx_max");
+	$mhz = $csv->{'Freq-MHz'}->slice("$idx_min:$idx_max");
 
 
 	# Sum the goal function and return the result:
-	my $ret = 0;
+	my $weight = $goal->{weight} || 1;
+	my $type = $goal->{type} // 'sum';
+	my $n = nelem($p);
+	my $sum = 0;
+	my $mag = 0;
+	my $avg = 0;
 	my $min;
 	my $max;
-	for ($i = 0; $i < nelem($p); $i++)
+	for ($i = 0; $i < $n; $i++)
 	{
-		my $v = $goal->{result}->($p->slice("($i)"));
-		$ret += $v;
+		my $v = $goal->{result}->($p->slice("($i)"), $mhz->slice("($i)")); 
 		$min = $v if (!defined($min) || $v < $min);
 		$max = $v if (!defined($max) || $v > $max);
-	}
+		$sum += $v;
 
-	#print "Calculated goal $goal->{field} is $ret [$min,$max]. Values $goal->{mhz_min} to $goal->{mhz_max} MHz:\n\t$p\n";
+		$mag += $v**2;
+	}
+	
+	$avg = $sum / $n;
+	$mag = sqrt($mag);
+
+	my $ret = $sum;
+
+	if ($type eq 'sum')    { $ret = $sum; }
+	elsif ($type eq 'avg') { $ret = $avg; }
+	elsif ($type eq 'min') { $ret = $min; }
+	elsif ($type eq 'max') { $ret = $max; }
+	elsif ($type eq 'mag') { $ret = $mag; }
+
+	$ret *= $weight;
+
+	print "Calculated goal $goal->{field} is $ret [$min,$max]. Values $goal->{mhz_min} to $goal->{mhz_max} MHz:\n\t$p\n";
 	return $ret;
 }
 
@@ -247,8 +356,6 @@ sub f
 {
 	my ($vec) = @_;
 
-
-
 	my $lengths = $vec->slice("1:5", 0);
 	my $spaces = $vec->slice("6:10", 0);
 	
@@ -270,9 +377,11 @@ sub f
 	my $ret = $vec->slice("(0)");
 	$ret *= 0;
 
+
 	foreach my $g (@$goals) {
-		$g->{weight} || 1;
-		$ret += goal_eval($csv, $g) * $g->{weight};
+		next if (!$g->{enabled});
+
+		$ret += goal_eval($csv, $g);
 	}
 
 	return $ret;
@@ -285,6 +394,7 @@ sub log
 	# $vals is f($vec)
 	# $ssize is the simplex size, or roughly, how close to being converged.
 
+	my $minima = $vec->slice("(0)", 0);
 	my $lengths = $vec->slice("1:5", 0);
 	my $spaces = $vec->slice("6:10", 0);
 	
@@ -296,10 +406,9 @@ sub log
 	# ie: x=[6 0] -> vals=[76 4]
 	# so, from above: f(6) == 76 and f(0) == 4
 
-	our $count = 0;
 
-	$count++;
-	print "\n\nLOG $count: $ssize > $tolerance, continuing.\n";
+	$log_count++;
+	print "\n\nLOG $log_count: $ssize > $tolerance, minima = $minima.\n";
 }
 
 sub load_csv
