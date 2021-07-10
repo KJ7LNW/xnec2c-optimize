@@ -25,17 +25,21 @@ my $freq_step = ($freq_max-$freq_min)/($n_freq-1);
 # NEC Geometry 
 
 # yagi dimensions from https://www.qsl.net/dk7zb/PVC-Yagis/5-Ele-2m.htm
-my $vec_initial = pdl 
-	(
-	# unused value:
-	0,
-
-	# element lenghts
-	1.038, 0.955, 0.959, 0.949, 0.935,
+my $vars = {
+	# Element lengths
+	lengths => {
+			values  => [ 1.038, 0.955, 0.959, 0.949, 0.935 ],
+			enabled => [ 1,     1,     1,     1,     1 ]
+		},
 
 	# Spaces between elements:
-	0.0, 0.280, 0.15, 0.520, 0.53)
-;
+	spaces => {
+			values  => [ 0.000, 0.280, 0.15, 0.520, 0.53 ],
+			enabled => [ 1,     1,     1,    1,     1 ]
+		}
+};
+
+my $vec_initial = build_simplex_vars($vars);
 
 ###################
 # Simplex Options
@@ -185,7 +189,7 @@ my $goals = [
 
 print "===== Initial Condition ==== \n";
 
-my @yagi = yagi($vec_initial->slice("1:5"), $vec_initial->slice("6:10"));
+my @yagi = yagi($vec_initial);
 NEC2::save("yagi.nec", @yagi);
 print @yagi;
 
@@ -266,6 +270,18 @@ sub goal_eval
 	for ($i = 0; $i < $n; $i++)
 	{
 		my $v = $goal->{result}->($p->slice("($i)"), $mhz->slice("($i)")); 
+
+		if ($v eq pdl(['inf']))
+		{
+			warn "result($goal->{field}) at index $i is infinite, using 1e6";
+			$v = 1e6;
+		}
+		if ($v eq pdl(['nan']) || $v eq pdl(['-nan']))
+		{
+			warn "result($goal->{field}) at index $i is NaN, skipping";
+			next;
+		}
+
 		$min = $v if (!defined($min) || $v < $min);
 		$max = $v if (!defined($max) || $v > $max);
 		$sum += $v;
@@ -292,7 +308,12 @@ sub goal_eval
 
 sub yagi
 {
-	my ($lengths, $spaces) = @_;
+	my ($vec) = @_;
+
+	my $lengths = get_simplex_var($vars, $vec, 'lengths');
+	my $spaces = get_simplex_var($vars, $vec, 'spaces');
+	print "yagi: lengths=[" . join(', ', @$lengths) . "]\n";
+	print "yagi: spaces=[" . join(', ', @$spaces) . "]\n";
 
 	my $n_segments = 11; # must be odd!
 	my $ex_seg = int($n_segments / 2) + 1;
@@ -309,13 +330,9 @@ sub yagi
 	for (my $i = 0 ; $i < nelem($lengths) ; $i++) {
 
 		# convert PDL's to normal floats:
-		my $l = $lengths->slice("($i)");
-		my $s = $spaces->slice("($i)");
+		my $l = $lengths->[$i];
+		my $s = $spaces->[$i];
 		
-		$l = unpdl($l)->[0];
-		$s = unpdl($s)->[0];
-
-
 		# spaces are distances between so accumulate the Z offset
 		$zoff += $s;
 		
@@ -362,21 +379,15 @@ sub f
 {
 	my ($vec) = @_;
 
-	my $lengths = $vec->slice("1:5", 0);
-	my $spaces = $vec->slice("6:10", 0);
-	
 	my $inotify = Linux::Inotify2->new;
 	$inotify->watch("yagi.nec.csv", IN_CLOSE_WRITE)
 		or die "inotify: $!: yagi.nec.csv";
 
-	NEC2::save("yagi.nec", yagi($lengths, $spaces));
-
-	my @e;
-	@e = $inotify->read;
-	#printf "mask\t%d\n", $_->mask foreach @e;
+	# save and wait for the CSV to be written:
+	NEC2::save("yagi.nec", yagi($vec));
+	$inotify->read;
 
 	my $csv = load_csv("yagi.nec.csv");
-
 
 	# Whatever vector format $vec->slice("(0)") is, $ret must be also.
 	# So slice it, multiply times zero, and then add whatever you need:
@@ -401,12 +412,13 @@ sub log
 	# $ssize is the simplex size, or roughly, how close to being converged.
 
 	my $minima = $vec->slice("(0)", 0);
-	my $lengths = $vec->slice("1:5", 0);
-	my $spaces = $vec->slice("6:10", 0);
 	
+	my $lengths = get_simplex_var($vars, $vec, 'lengths');
+	my $spaces = get_simplex_var($vars, $vec, 'spaces');
+
 	#print "f: vec=$vec\n";
-	print "f: lengths=$lengths\n";
-	print "f: spaces=$spaces\n";
+	print "f: lengths=[" . join(', ', @$lengths) . "]\n";
+	print "f: spaces=[" . join(', ', @$spaces) . "]\n";
 
 	# each vector element passed to log() has a min and max value.
 	# ie: x=[6 0] -> vals=[76 4]
@@ -434,4 +446,86 @@ sub load_csv
 	}
 
 	return \%h;
+}
+
+sub build_simplex_vars 
+{
+	my ($vars) = @_;
+
+
+	# first element is for simplex's return-value use, set it to 0.	
+	my @pdl_vars = (0);
+	foreach my $var_name (sort keys(%$vars))
+	{
+		my $var = $vars->{$var_name};
+
+		my $n = scalar(@{ $var->{values} });
+
+		# If enabled is missing or a non-scalar (ie =1 or =0) then form it properly
+		# as either all 1's or all 0's:
+		if (!defined($var->{enabled}) || (!ref($var->{enabled}) && $var->{enabled}))
+		{
+			$var->{enabled} = [ map { 1 } @{ $var->{values} } ] 
+		}
+		elsif (defined($var->{enabled}) && !ref($var->{enabled}) && !$var->{enabled})
+		{
+			$var->{enabled} = [ map { 0 } @{ $var->{values} } ] 
+		}
+
+		if (defined($var->{enabled}) && $n != scalar(@{ $var->{enabled} }))
+		{
+			die "variable $var must have the same length array for 'values' as for 'enabled'"
+		}
+
+
+		for (my $i = 0; $i < $n; $i++)
+		{
+			# var is enabled for simplex if enabled[$i] == 1
+			if ($var->{enabled}->[$i])
+			{
+				push(@pdl_vars, $var->{values}->[$i]);
+			}
+		}
+	}
+
+	return pdl \@pdl_vars;
+}
+
+sub get_simplex_var
+{
+	my ($vars, $pdl, $var_name) = @_;
+
+	my @ret;
+	
+	my $var = $vars->{$var_name};
+	my $n = scalar(@{ $var->{values} });
+	my $pdl_idx = 1; # skip first element
+
+	# skip ahead to where the pdl_idx that we need is located:
+	foreach my $vn (sort keys(%$vars))
+	{
+		my $var = $vars->{$vn};
+
+		# done if we find it:
+		last if $vn eq $var_name;
+
+		$pdl_idx++ foreach (grep { $_ } @{ $var->{enabled} });
+	}
+	
+	for (my $i = 0; $i < $n; $i++)
+	{
+		# use the pdl index if it is enabled for optimization
+		# otherwise use the original index in $var.
+		if ($var->{enabled}->[$i])
+		{
+			push(@ret, unpdl($pdl->slice("($pdl_idx)", 0))->[0]);
+			$pdl_idx++;
+		}
+		else
+		{
+			push(@ret, $var->{values}->[$i]);
+		}
+	}
+
+	return \@ret;
 }
