@@ -97,11 +97,14 @@ my $max_iter = 1000;
 #
 #         You can also experiment with creating a synthetic goal and exponentiating
 #         the goal as a fraction.  For example:
-#            result => sub { my ($gain,$mhz) = @_; return $gain < 1 ? 100 : 2**(12/$gain); }
+#            result => sub { my ($gain,$mhz) = @_; return 2**(12/$gain); }
 #         This creates a "goal" of 12dB gain such that when the exponent reaches 12/12 it
 #         will evaluate as "2".  If gain is less than 12dB it will score exponentially
 #         worse.  This also has the effect of normalizing the result against the goal
 #         which makes the goals more even (you could also adjust the weights).
+#
+#         For SWR, invert the fraction so that lower is better:
+#            result => sub { my ($swr,$mhz)=@_; return 2**($swr/1.5); }
 #
 #
 #
@@ -129,14 +132,15 @@ my $goals = [
 		# A higher power makes the max-gain higher
 		# A lower power makes a flater curve
 		#
-		#
+		#result => sub { my ($gain,$mhz)=@_; return -$gain**0.5; }
+		
 		# The (4-(146-$mhz)**2)**2 term attempts to maximize the gain at 146MHz by reducing
-		# the multiple as it moves away from center.
-		result => sub { my ($gain,$mhz)=@_; return -$gain**0.5 * (4-(146-$mhz)**2)**2; }
+		# the multiple as it moves away from center for a narrow-band antenna.
+		#result => sub { my ($gain,$mhz)=@_; return -$gain**0.5 * (4-(146-$mhz)**2)**2; }
 		
 		# This result function exponentiates to the power of the target gain over current gain.
 		# It will tend toward a value of 1 as the target is exceeded.
-		#result => sub { my ($gain,$mhz)=@_; return $gain < 1 ? 100 : 2**(12/$gain); }
+		result => sub { my ($gain,$mhz)=@_; return 2**(12/$gain); }
 
 		#result => sub { my ($gain,$mhz)=@_; return $gain < 1 ? 100 : (12/$gain); }
 
@@ -156,23 +160,25 @@ my $goals = [
 		# The optmizer minimizes results, penalize swr quadratically:
 		# A larger power provides a flatter SWR
 		# A lower power reduces the strength of the SWR penalty.
-		result => sub { my ($swr,$mhz)=@_; return $swr**2.0 * (4-(146-$mhz)**2)**2; }
-		
-		#result => sub { my ($swr,$mhz)=@_; return 2**$swr; }
+		result => sub { my ($swr,$mhz)=@_; return 2**($swr/1.5); }
+         
+		# The ((146-$mhz)**2)**2 term attempts to maximize the gain at 146MHz by increasing
+		# the multiple as it moves away from center for a narrow-band antenna.
+		#result => sub { my ($swr,$mhz)=@_; return $swr**2.0 * ((146-$mhz)**2)**2; }
 	},
 
 	{ 
 		field => 'F/B Ratio',
-		enabled => 0,
-		mhz_min => 145,
-		mhz_max => 146,
+		enabled => 1,
+		mhz_min => 144,
+		mhz_max => 148,
 
 		weight => 1,
 
 		type => 'avg', # calculate minima by sum, avg, min, max, or mag
 
-		#result => sub { my ($fb,$mhz)=@_; return 2**(20/$fb); }
-		result => sub { my ($fb,$mhz)=@_; return (20/$fb); }
+		result => sub { my ($fb,$mhz)=@_; return 2**(20/$fb); }
+		#result => sub { my ($fb,$mhz)=@_; return (20/$fb); }
 	},
 ];
 
