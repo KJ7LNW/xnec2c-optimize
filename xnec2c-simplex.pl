@@ -17,12 +17,35 @@ use Data::Dumper;
 ###################
 # For RP tag:
 my $freq_min = 134;
-my $freq_max = 158;
-my $n_freq = 100;
+my $freq_max = 460;
+my $n_freq = 200;
 my $freq_step = ($freq_max-$freq_min)/($n_freq-1);
 
 ###################
-# NEC Geometry 
+# NEC2 Geometry 
+
+# It used to be that a single geometry array had to be sliced into the
+# different variables represented by the array.  This was non-intuitive
+# and error-prone.  This new format simply specifies a datastructure of
+# variables, values, and whether or not a value is enabled.  This means
+# you can selectively disable a particular value and it will be excluded
+# from optimization but still included when passed to the geometry (yagi)
+# function.  Helper functions compile the state of this variable structure 
+# into the vector array needed by simplex, and then extract values into
+# a usable format to be passed to the geometry function.
+#
+# Basic format:  varname => { values => [...], enabled => [...] }, ...
+#
+# varname: the name of the variable being used.
+# values:  an arrayref of values to be optimized
+# enabled: 1 or 0: enabled a specific index to be optimized.
+# Notes:
+#      * If 'enabled' is undefined then all values are enabled.
+#      * If 'enabled' is not an array, it can be a scalar 0 or 1
+#        to indicate that all values are enabled/disabled.
+#      * Enabling or disabling a variable may be useful in testing
+#        certain geometry charactaristics during optimization.
+# 
 
 # yagi dimensions from https://www.qsl.net/dk7zb/PVC-Yagis/5-Ele-2m.htm
 my $vars = {
@@ -132,12 +155,13 @@ my $max_iter = 1000;
 #         This weight is multiplied times the result of the aggregation type
 my $goals = [
 	{ 
+		name => '2m gain',
 		field => 'Gain-max',
 		enabled => 1,
 		mhz_min => 144,
 		mhz_max => 148,
 
-		weight => 5,
+		weight => 1,
 		
 		type => 'avg', 
 
@@ -160,8 +184,9 @@ my $goals = [
 	},
 
 	{ 
+		name => '2m VSWR',
 		field => 'VSWR',
-		enabled => 5,
+		enabled => 1,
 		mhz_min => 144,
 		mhz_max => 150,
 
@@ -179,14 +204,80 @@ my $goals = [
 		# the multiple as it moves away from center for a narrow-band antenna.
 		#result => sub { my ($swr,$mhz)=@_; return $swr**2.0 * ((146-$mhz)**2)**2; }
 	},
-
 	{ 
+		name => '2m F/B Ratio',
 		field => 'F/B Ratio',
 		enabled => 1,
 		mhz_min => 144,
 		mhz_max => 148,
 
+		weight => 0.1,
+
+		type => 'avg', # calculate minima by sum, avg, min, max, or mag
+
+		result => sub { my ($fb,$mhz)=@_; return 2**(20/$fb); }
+		#result => sub { my ($fb,$mhz)=@_; return (20/$fb); }
+	},
+	{ 
+		name => '70cm gain',
+		field => 'Gain-max',
+		#field => 'Gain-viewer',
+		enabled => 1,
+		mhz_min => 430,
+		mhz_max => 450,
+
+		weight => 10,
+		
+		type => 'avg', 
+
+		# Simplex minimizes, so return a negative value and raise it to a power.
+		# A higher power makes the max-gain higher
+		# A lower power makes a flater curve
+		#
+		#result => sub { my ($gain,$mhz)=@_; return -$gain**0.5; }
+		
+		# The (4-(146-$mhz)**2)**2 term attempts to maximize the gain at 146MHz by reducing
+		# the multiple as it moves away from center for a narrow-band antenna.
+		#result => sub { my ($gain,$mhz)=@_; return -$gain**0.5 * (4-(146-$mhz)**2)**2; }
+		
+		# This result function exponentiates to the power of the target gain over current gain.
+		# It will tend toward a value of 1 as the target is exceeded.
+		result => sub { my ($gain,$mhz)=@_; return 2**(12/$gain); }
+
+		#result => sub { my ($gain,$mhz)=@_; return $gain < 1 ? 100 : (12/$gain); }
+
+	},
+
+	{ 
+		name => '70cm VSWR',
+		field => 'VSWR',
+		enabled => 10,
+		mhz_min => 430,
+		mhz_max => 450,
+
+		# Multiplicative weight, relative scale of the goal
 		weight => 1,
+
+		type => 'avg', # calculate minima by sum, avg, min, or max
+
+		# The optmizer minimizes results, penalize swr quadratically:
+		# A larger power provides a flatter SWR
+		# A lower power reduces the strength of the SWR penalty.
+		result => sub { my ($swr,$mhz)=@_; return 2**($swr/0.5); }
+         
+		# The ((146-$mhz)**2)**2 term attempts to maximize the gain at 146MHz by increasing
+		# the multiple as it moves away from center for a narrow-band antenna.
+		#result => sub { my ($swr,$mhz)=@_; return $swr**2.0 * ((146-$mhz)**2)**2; }
+	},
+
+	{ 
+		name => '70cm F/B Ratio',
+		field => 'F/B Ratio',
+		enabled => 1,
+		mhz_min => 430,
+		mhz_max => 450,
+
+		weight => 5,
 
 		type => 'avg', # calculate minima by sum, avg, min, max, or mag
 
@@ -197,7 +288,7 @@ my $goals = [
 	# minimize antenna length
 	{ 
 		name => 'Antenna Length',
-		enabled => 1,
+		enabled => 0,
 		weight => 10,
 		result => sub {
 				my ($vec, $csv) = @_;
@@ -213,7 +304,7 @@ my $goals = [
 	# minimize antenna width
 	{ 
 		name => 'Antenna Width',
-		enabled => 1,
+		enabled => 0,
 		weight => 10,
 		result => sub {
 				my ($vec, $csv) = @_;
@@ -285,7 +376,7 @@ sub goal_eval
 	if (!defined($goal->{field}))
 	{
 		my $v = $goal->{result}->($vec, $csv); 
-		print "$goal->{name} is $v\n";
+		print "Goal $goal->{name} is $v\n";
 		return $v * $weight;
 	}
 
@@ -354,7 +445,8 @@ sub goal_eval
 
 	$ret *= $weight;
 
-	print "Calculated goal $goal->{field} is $ret [$min,$max]. Values $goal->{mhz_min} to $goal->{mhz_max} MHz:\n\t$p\n";
+	my $name = $goal->{name} // '';
+	print "Goal $name ($goal->{field}) is $ret [$min,$max]. Values $goal->{mhz_min} to $goal->{mhz_max} MHz:\n\t$p\n";
 	return $ret;
 }
 
@@ -368,7 +460,7 @@ sub yagi
 	print "yagi: lengths=[" . join(', ', @$lengths) . "]\n";
 	print "yagi: spaces=[" . join(', ', @$spaces) . "]\n";
 
-	my $n_segments = 31; # must be odd!
+	my $n_segments = 11; # must be odd!
 	my $ex_seg = int($n_segments / 2) + 1;
 
 	#print "lengths: $lengths\n";
