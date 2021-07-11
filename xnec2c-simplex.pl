@@ -44,10 +44,13 @@ my $vec_initial = build_simplex_vars($vars);
 ###################
 # Simplex Options
 
-# "Step size" but not really, a bigger value makes larger jumps
-# but the value doesn't translate to a unit.
-# (it actually stands for simplex size, it initializes the size of the simplex tetrahedron)
-my $ssize = 0.075;
+# $ssize: "Step size" but not really, a bigger value makes larger jumps but the
+# value doesn't translate to a unit.  (It actually stands for simplex size,
+# and it initializes the size of the simplex tetrahedron.)
+#
+# Because it is proportional to size, lower frequencies need a larger value
+# and higher frequencies need a lower value.
+my $ssize = 0.1;
 
 # Conversion tolerance, exit optmizer when simplex isn't moving much:
 my $tolerance = 1e-6;
@@ -61,6 +64,12 @@ my $max_iter = 1000;
 
 # field: the name of the field in the .csv.  
 #   Available fields: Freq-MHz, Z-real, Z-imag, Z-magn, Z-phase, VSWR, Gain-max, Gain-viewer, F/B Ratio
+#
+#   If field is left undefined, then instead of passing field values to the result function
+#   it will pass the current simplex vector and csv so the function can do its
+#   own computation.  This is used below to minimize the length of the antenna.
+#
+# name: an optional field to display the name of the goal
 #
 # enabled: 1 or 0 to enable/disable.  Not if enable is undefined then it defaults to enabled.
 #
@@ -152,7 +161,7 @@ my $goals = [
 
 	{ 
 		field => 'VSWR',
-		enabled => 1,
+		enabled => 5,
 		mhz_min => 144,
 		mhz_max => 150,
 
@@ -164,7 +173,7 @@ my $goals = [
 		# The optmizer minimizes results, penalize swr quadratically:
 		# A larger power provides a flatter SWR
 		# A lower power reduces the strength of the SWR penalty.
-		result => sub { my ($swr,$mhz)=@_; return 2**($swr/1.5); }
+		result => sub { my ($swr,$mhz)=@_; return 2**($swr/0.5); }
          
 		# The ((146-$mhz)**2)**2 term attempts to maximize the gain at 146MHz by increasing
 		# the multiple as it moves away from center for a narrow-band antenna.
@@ -184,6 +193,39 @@ my $goals = [
 		result => sub { my ($fb,$mhz)=@_; return 2**(20/$fb); }
 		#result => sub { my ($fb,$mhz)=@_; return (20/$fb); }
 	},
+
+	# minimize antenna length
+	{ 
+		name => 'Antenna Length',
+		enabled => 1,
+		weight => 10,
+		result => sub {
+				my ($vec, $csv) = @_;
+				my %vars = get_simplex_vars($vars, $vec);
+				my $spaces = $vars{spaces};
+				my $length = 0;
+				$length += $_ foreach @$spaces;
+
+				return $length;
+			}
+	},
+
+	# minimize antenna width
+	{ 
+		name => 'Antenna Width',
+		enabled => 1,
+		weight => 10,
+		result => sub {
+				my ($vec, $csv) = @_;
+				my %vars = get_simplex_vars($vars, $vec);
+				my $lengths = $vars{lengths};
+				my $width = 0;
+				
+				$width = ($_ > $width ? $_ : $width) foreach @$lengths;
+
+				return $width;
+			}
+	}
 ];
 
 
@@ -200,11 +242,11 @@ if ( -e "yagi.nec.csv" ) {
 		# Default to enabled if undefined.
 		$g->{enabled} //= 1;
 		next if (!$g->{enabled});
-		goal_eval($csv, $g);
+		goal_eval($vec_initial, $csv, $g);
 	}
 }
 
-print "\nTurn on the optimizer and press enter to begin.\n";
+print "\nOpen xnec2c and select File->Optimizer Output. Then you may press enter to begin.\n";
 <STDIN>;
 
 
@@ -233,7 +275,19 @@ my $log_count = 0;
 
 sub goal_eval
 {
-	my ($csv, $goal) = @_;
+	my ($vec, $csv, $goal) = @_;
+
+	my $weight = $goal->{weight} || 1;
+	my $type = $goal->{type} // 'sum';
+
+	# If no field is defined, just call the goal
+	# function on the variables and pass the $csv.
+	if (!defined($goal->{field}))
+	{
+		my $v = $goal->{result}->($vec, $csv); 
+		print "$goal->{name} is $v\n";
+		return $v * $weight;
+	}
 
 	# Find the index for the given frequency range:
 	my $mhz;
@@ -259,8 +313,6 @@ sub goal_eval
 
 
 	# Sum the goal function and return the result:
-	my $weight = $goal->{weight} || 1;
-	my $type = $goal->{type} // 'sum';
 	my $n = nelem($p);
 	my $sum = 0;
 	my $mag = 0;
@@ -316,7 +368,7 @@ sub yagi
 	print "yagi: lengths=[" . join(', ', @$lengths) . "]\n";
 	print "yagi: spaces=[" . join(', ', @$spaces) . "]\n";
 
-	my $n_segments = 11; # must be odd!
+	my $n_segments = 31; # must be odd!
 	my $ex_seg = int($n_segments / 2) + 1;
 
 	#print "lengths: $lengths\n";
@@ -401,7 +453,7 @@ sub f
 	foreach my $g (@$goals) {
 		next if (!$g->{enabled});
 
-		$ret += goal_eval($csv, $g);
+		$ret += goal_eval($vec, $csv, $g);
 	}
 
 	return $ret;
