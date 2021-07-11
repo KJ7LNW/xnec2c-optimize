@@ -189,7 +189,7 @@ my $goals = [
 
 print "===== Initial Condition ==== \n";
 
-my @yagi = yagi($vec_initial);
+my @yagi = yagi(get_simplex_vars($vars, $vec_initial));
 NEC2::save("yagi.nec", @yagi);
 print @yagi;
 
@@ -308,10 +308,11 @@ sub goal_eval
 
 sub yagi
 {
-	my ($vec) = @_;
+	my (%vars) = @_;
 
-	my $lengths = get_simplex_var($vars, $vec, 'lengths');
-	my $spaces = get_simplex_var($vars, $vec, 'spaces');
+	my $lengths = $vars{lengths};
+	my $spaces = $vars{spaces};
+
 	print "yagi: lengths=[" . join(', ', @$lengths) . "]\n";
 	print "yagi: spaces=[" . join(', ', @$spaces) . "]\n";
 
@@ -384,7 +385,9 @@ sub f
 		or die "inotify: $!: yagi.nec.csv";
 
 	# save and wait for the CSV to be written:
-	NEC2::save("yagi.nec", yagi($vec));
+	
+
+	NEC2::save("yagi.nec", yagi(get_simplex_vars($vars, $vec)));
 	$inotify->read;
 
 	my $csv = load_csv("yagi.nec.csv");
@@ -452,7 +455,6 @@ sub build_simplex_vars
 {
 	my ($vars) = @_;
 
-
 	# first element is for simplex's return-value use, set it to 0.	
 	my @pdl_vars = (0);
 	foreach my $var_name (sort keys(%$vars))
@@ -498,6 +500,7 @@ sub get_simplex_var
 	my @ret;
 	
 	my $var = $vars->{$var_name};
+
 	my $n = scalar(@{ $var->{values} });
 	my $pdl_idx = 1; # skip first element
 
@@ -528,4 +531,18 @@ sub get_simplex_var
 	}
 
 	return \@ret;
+}
+
+sub get_simplex_vars
+{
+	my ($vars, $pdl) = @_;	
+	
+	my %h;
+
+	foreach my $var (keys %$vars)
+	{
+		$h{$var} = get_simplex_var($vars, $pdl, $var);
+	}
+
+	return %h;
 }
