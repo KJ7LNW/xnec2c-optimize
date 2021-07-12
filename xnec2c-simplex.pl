@@ -14,310 +14,17 @@ use PDL::Opt::Simplex;
 use Linux::Inotify2;
 use Data::Dumper;
 
-###################
-# For RP tag:
-my $freq_min = 134;
-my $freq_max = 460;
-my $n_freq = 200;
-my $freq_step = ($freq_max-$freq_min)/($n_freq-1);
+my $config = do($ARGV[0]);
+#print Dumper $config;
+#exit;
 
-###################
-# NEC2 Geometry 
+my $FR = $config->{FR};
+my $goals = $config->{goals};
+my $vars = $config->{geometry};
 
-# It used to be that a single geometry array had to be sliced into the
-# different variables represented by the array.  This was non-intuitive
-# and error-prone.  This new format simply specifies a datastructure of
-# variables, values, and whether or not a value is enabled.  This means
-# you can selectively disable a particular value and it will be excluded
-# from optimization but still included when passed to the geometry (yagi)
-# function.  Helper functions compile the state of this variable structure 
-# into the vector array needed by simplex, and then extract values into
-# a usable format to be passed to the geometry function.
-#
-# Basic format:  varname => { values => [...], enabled => [...] }, ...
-#
-# varname: the name of the variable being used.
-# values:  an arrayref of values to be optimized
-# enabled: 1 or 0: enabled a specific index to be optimized.
-# Notes:
-#      * If 'enabled' is undefined then all values are enabled.
-#      * If 'enabled' is not an array, it can be a scalar 0 or 1
-#        to indicate that all values are enabled/disabled.
-#      * Enabling or disabling a variable may be useful in testing
-#        certain geometry charactaristics during optimization.
-# 
+$FR->{freq_step} = ($FR->{freq_max} - $FR->{freq_min}) / ($FR->{n_freq} - 1);
 
-# yagi dimensions from https://www.qsl.net/dk7zb/PVC-Yagis/5-Ele-2m.htm
-my $vars = {
-	# Element lengths
-	lengths => {
-			values  => [ 1.038, 0.955, 0.959, 0.949, 0.935 ],
-			enabled => [ 1,     1,     1,     1,     1 ]
-		},
-
-	# Spaces between elements:
-	spaces => {
-			values  => [ 0.000, 0.280, 0.15, 0.520, 0.53 ],
-			enabled => [ 1,     1,     1,    1,     1 ]
-		}
-};
-
-my $vec_initial = build_simplex_vars($vars);
-
-###################
-# Simplex Options
-
-# $ssize: "Step size" but not really, a bigger value makes larger jumps but the
-# value doesn't translate to a unit.  (It actually stands for simplex size,
-# and it initializes the size of the simplex tetrahedron.)
-#
-# Because it is proportional to size, lower frequencies need a larger value
-# and higher frequencies need a lower value.
-my $ssize = 0.1;
-
-# Conversion tolerance, exit optmizer when simplex isn't moving much:
-my $tolerance = 1e-6;
-
-# Max number of Simplex optimizations:
-my $max_iter = 1000;
-
-
-###################
-# Goal Options
-
-# field: the name of the field in the .csv.  
-#   Available fields: Freq-MHz, Z-real, Z-imag, Z-magn, Z-phase, VSWR, Gain-max, Gain-viewer, F/B Ratio
-#
-#   If field is left undefined, then instead of passing field values to the result function
-#   it will pass the current simplex vector and csv so the function can do its
-#   own computation.  This is used below to minimize the length of the antenna.
-#
-# name: an optional field to display the name of the goal
-#
-# enabled: 1 or 0 to enable/disable.  Not if enable is undefined then it defaults to enabled.
-#
-# mhz_min: The minimum frequency for which the goal applies
-# mhz_max: The maximum frequency for which the goal applies
-#
-# result: a subroutine (coderef) that is passed a measurement (and frequency) and returns the
-#         value that should be minimized.  The result should always return a smaller
-#         value when the it is closer to the goal because Simplex works to 
-#         find a minima.  The value can be negative.  The frequency being evaluated by the 
-#         result function could be used to scale the goal, for example, if the shape of the 
-#         goal should vary with frequency.  The name of the variables in the function do not
-#         matter, just know that the values being passed are that which is measured from 'field'
-#         and the 2nd argument is always the frequency in MHz being evaluated.
-#
-#         Once all goals are evaulated independantly for each measurement they are summed
-#         together.  Thus, it is important the the scale of one goal against another
-#         is similar.  If one goal swings the total sum of all goals too much then 
-#         the subtle (and possibly important) effects of a different goal will be lost 
-#         in the noise of the "louder" goal.  Work could be done here to normalize all
-#         goal results against eachother before summing them together.
-#
-#         For values like VSWR where lower values are better, you can
-#         penalize larger values by raising them to a power.  For example:
-#            result => sub { my ($swr,$mhz) = @_; return $swr**2; }
-#         This forces a flatter SWR curve because higher values are quadratically
-#         worse than lower values.
-#
-#         For values like gain where higher values are better, the value needs to be
-#         inverted for simplex.  The simplest way to do this is to make it negative:
-#            result => sub { my ($gain,$mhz) = @_; return -$gain; }
-#
-#         However you may also create a bias by raising it to a fractional power:
-#            result => sub { my ($gain,$mhz) = @_; return -$gain*0.5; }
-#         A higher power makes the max-gain higher because higher gains get a greater
-#         negative score, thus being "better" in terms of how Simplex evaluates it.
-#         A lower power makes a flater curve for the opposite reason.
-#
-#         You can also experiment with creating a synthetic goal and exponentiating
-#         the goal as a fraction.  For example:
-#            result => sub { my ($gain,$mhz) = @_; return 2**(12/$gain); }
-#         This creates a "goal" of 12dB gain such that when the exponent reaches 12/12 it
-#         will evaluate as "2".  If gain is less than 12dB it will score exponentially
-#         worse.  This also has the effect of normalizing the result against the goal
-#         which makes the goals more even (you could also adjust the weights).
-#
-#         For SWR, invert the fraction so that lower is better:
-#            result => sub { my ($swr,$mhz)=@_; return 2**($swr/1.5); }
-#
-#
-#
-# type: aggregation type, what to do with of the return from result subroutine for each frequency.
-#       sum: add them together
-#       avg: add them together and divide by the count
-#       min: return the minimum from the set
-#       max: return the maximum from the set
-#       mag: take the vector magnitude: sum the square of each result and take the sqrt
-#
-# weight: Multiplicative weight, relative scale of the goal.  
-#         This weight is multiplied times the result of the aggregation type
-my $goals = [
-	{ 
-		name => '2m gain',
-		field => 'Gain-max',
-		enabled => 1,
-		mhz_min => 144,
-		mhz_max => 148,
-
-		weight => 1,
-		
-		type => 'avg', 
-
-		# Simplex minimizes, so return a negative value and raise it to a power.
-		# A higher power makes the max-gain higher
-		# A lower power makes a flater curve
-		#
-		#result => sub { my ($gain,$mhz)=@_; return -$gain**0.5; }
-		
-		# The (4-(146-$mhz)**2)**2 term attempts to maximize the gain at 146MHz by reducing
-		# the multiple as it moves away from center for a narrow-band antenna.
-		#result => sub { my ($gain,$mhz)=@_; return -$gain**0.5 * (4-(146-$mhz)**2)**2; }
-		
-		# This result function exponentiates to the power of the target gain over current gain.
-		# It will tend toward a value of 1 as the target is exceeded.
-		result => sub { my ($gain,$mhz)=@_; return 2**(12/$gain); }
-
-		#result => sub { my ($gain,$mhz)=@_; return $gain < 1 ? 100 : (12/$gain); }
-
-	},
-
-	{ 
-		name => '2m VSWR',
-		field => 'VSWR',
-		enabled => 1,
-		mhz_min => 144,
-		mhz_max => 150,
-
-		# Multiplicative weight, relative scale of the goal
-		weight => 1,
-
-		type => 'avg', # calculate minima by sum, avg, min, or max
-
-		# The optmizer minimizes results, penalize swr quadratically:
-		# A larger power provides a flatter SWR
-		# A lower power reduces the strength of the SWR penalty.
-		result => sub { my ($swr,$mhz)=@_; return 2**($swr/0.5); }
-         
-		# The ((146-$mhz)**2)**2 term attempts to maximize the gain at 146MHz by increasing
-		# the multiple as it moves away from center for a narrow-band antenna.
-		#result => sub { my ($swr,$mhz)=@_; return $swr**2.0 * ((146-$mhz)**2)**2; }
-	},
-	{ 
-		name => '2m F/B Ratio',
-		field => 'F/B Ratio',
-		enabled => 1,
-		mhz_min => 144,
-		mhz_max => 148,
-
-		weight => 0.1,
-
-		type => 'avg', # calculate minima by sum, avg, min, max, or mag
-
-		result => sub { my ($fb,$mhz)=@_; return 2**(20/$fb); }
-		#result => sub { my ($fb,$mhz)=@_; return (20/$fb); }
-	},
-	{ 
-		name => '70cm gain',
-		field => 'Gain-max',
-		#field => 'Gain-viewer',
-		enabled => 1,
-		mhz_min => 430,
-		mhz_max => 450,
-
-		weight => 10,
-		
-		type => 'avg', 
-
-		# Simplex minimizes, so return a negative value and raise it to a power.
-		# A higher power makes the max-gain higher
-		# A lower power makes a flater curve
-		#
-		#result => sub { my ($gain,$mhz)=@_; return -$gain**0.5; }
-		
-		# The (4-(146-$mhz)**2)**2 term attempts to maximize the gain at 146MHz by reducing
-		# the multiple as it moves away from center for a narrow-band antenna.
-		#result => sub { my ($gain,$mhz)=@_; return -$gain**0.5 * (4-(146-$mhz)**2)**2; }
-		
-		# This result function exponentiates to the power of the target gain over current gain.
-		# It will tend toward a value of 1 as the target is exceeded.
-		result => sub { my ($gain,$mhz)=@_; return 2**(12/$gain); }
-
-		#result => sub { my ($gain,$mhz)=@_; return $gain < 1 ? 100 : (12/$gain); }
-
-	},
-
-	{ 
-		name => '70cm VSWR',
-		field => 'VSWR',
-		enabled => 10,
-		mhz_min => 430,
-		mhz_max => 450,
-
-		# Multiplicative weight, relative scale of the goal
-		weight => 1,
-
-		type => 'avg', # calculate minima by sum, avg, min, or max
-
-		# The optmizer minimizes results, penalize swr quadratically:
-		# A larger power provides a flatter SWR
-		# A lower power reduces the strength of the SWR penalty.
-		result => sub { my ($swr,$mhz)=@_; return 2**($swr/0.5); }
-         
-		# The ((146-$mhz)**2)**2 term attempts to maximize the gain at 146MHz by increasing
-		# the multiple as it moves away from center for a narrow-band antenna.
-		#result => sub { my ($swr,$mhz)=@_; return $swr**2.0 * ((146-$mhz)**2)**2; }
-	},
-
-	{ 
-		name => '70cm F/B Ratio',
-		field => 'F/B Ratio',
-		enabled => 1,
-		mhz_min => 430,
-		mhz_max => 450,
-
-		weight => 5,
-
-		type => 'avg', # calculate minima by sum, avg, min, max, or mag
-
-		result => sub { my ($fb,$mhz)=@_; return 2**(20/$fb); }
-		#result => sub { my ($fb,$mhz)=@_; return (20/$fb); }
-	},
-
-	# minimize antenna length
-	{ 
-		name => 'Antenna Length',
-		enabled => 0,
-		weight => 10,
-		result => sub {
-				my ($vec, $csv) = @_;
-				my %vars = get_simplex_vars($vars, $vec);
-				my $spaces = $vars{spaces};
-				my $length = 0;
-				$length += $_ foreach @$spaces;
-
-				return $length;
-			}
-	},
-
-	# minimize antenna width
-	{ 
-		name => 'Antenna Width',
-		enabled => 0,
-		weight => 10,
-		result => sub {
-				my ($vec, $csv) = @_;
-				my %vars = get_simplex_vars($vars, $vec);
-				my $lengths = $vars{lengths};
-				my $width = 0;
-				
-				$width = ($_ > $width ? $_ : $width) foreach @$lengths;
-
-				return $width;
-			}
-	}
-];
+my $vec_initial = build_simplex_vars($config->{geometry});
 
 
 print "===== Initial Condition ==== \n";
@@ -329,12 +36,7 @@ print @yagi;
 if ( -e "yagi.nec.csv" ) {
 	print "\n=== Goal Status ===\n";
 	my $csv = load_csv("yagi.nec.csv");
-	foreach my $g (@$goals) {
-		# Default to enabled if undefined.
-		$g->{enabled} //= 1;
-		next if (!$g->{enabled});
-		goal_eval($vec_initial, $csv, $g);
-	}
+	goal_eval_all($config->{goals}, $vec_initial, $csv);
 }
 
 print "\nOpen xnec2c and select File->Optimizer Output. Then you may press enter to begin.\n";
@@ -343,7 +45,7 @@ print "\nOpen xnec2c and select File->Optimizer Output. Then you may press enter
 
 print "\n===== Starting Optimization ==== \n";
 
-my ( $vec_optimal, $opt_ssize, $optval ) = simplex($vec_initial, $ssize, $tolerance, $max_iter, \&f, \&log);
+my ( $vec_optimal, $opt_ssize, $optval ) = simplex($vec_initial, $config->{simplex}{ssize}, $config->{simplex}{tolerance}, $config->{simplex}{max_iter}, \&f, \&log);
 
 
 print "\n===== Done! ==== \n";
@@ -450,6 +152,21 @@ sub goal_eval
 	return $ret;
 }
 
+sub goal_eval_all
+{
+	my ($goals, $vec, $csv) = @_;
+
+	my $ret = 0;
+	foreach my $g (@$goals) {
+		# Default to enabled if undefined.
+		$g->{enabled} //= 1;
+		next if (!$g->{enabled});
+		$ret += goal_eval($vec, $csv, $g);
+	}
+
+	return $ret;
+}
+
 sub yagi
 {
 	my (%vars) = @_;
@@ -473,8 +190,6 @@ sub yagi
 
 	my $zoff = 0;
 	for (my $i = 0 ; $i < nelem($lengths) ; $i++) {
-
-		# convert PDL's to normal floats:
 		my $l = $lengths->[$i];
 		my $s = $spaces->[$i];
 		
@@ -512,7 +227,7 @@ sub yagi
 
 		NEC2::NH->new(),
 		NEC2::NE->new(),
-		NEC2::FR->new(mhz => $freq_min, mhz_inc => $freq_step, n_freq => $n_freq),
+		NEC2::FR->new(mhz => $FR->{freq_min}, mhz_inc => $FR->{freq_step}, n_freq => $FR->{n_freq}),
 		NEC2::EN->new()
 		;
 
@@ -540,13 +255,7 @@ sub f
 	# So slice it, multiply times zero, and then add whatever you need:
 	my $ret = $vec->slice("(0)");
 	$ret *= 0;
-
-
-	foreach my $g (@$goals) {
-		next if (!$g->{enabled});
-
-		$ret += goal_eval($vec, $csv, $g);
-	}
+	$ret += goal_eval_all($config->{goals}, $vec, $csv);
 
 	return $ret;
 }
@@ -573,7 +282,7 @@ sub log
 
 
 	$log_count++;
-	print "\n\nLOG $log_count: $ssize > $tolerance, minima = $minima.\n";
+	print "\n\nLOG $log_count: $ssize > $config->{simplex}{tolerance}, minima = $minima.\n";
 }
 
 sub load_csv
