@@ -14,13 +14,26 @@ use PDL::Opt::Simplex;
 use Linux::Inotify2;
 use Data::Dumper;
 
-my $config = do($ARGV[0]);
+if (!@ARGV)
+{
+	print "usage: $0 config-file.conf\n";
+	exit 1;
+}
+
+my $filename_config = $ARGV[0];
+my $filename_nec = $ARGV[0];
+my $filename_nec_csv = $ARGV[0];
+
+$filename_nec =~ s/\.conf$//;
+$filename_nec     .= ".nec";
+$filename_nec_csv = "$filename_nec.csv";
+
+my $config = do($filename_config);
 #print Dumper $config;
 #exit;
 
 my $FR = $config->{FR};
 my $goals = $config->{goals};
-my $vars = $config->{geometry};
 
 $FR->{freq_step} = ($FR->{freq_max} - $FR->{freq_min}) / ($FR->{n_freq} - 1);
 
@@ -29,17 +42,22 @@ my $vec_initial = build_simplex_vars($config->{geometry});
 
 print "===== Initial Condition ==== \n";
 
-my @yagi = yagi(get_simplex_vars($vars, $vec_initial));
-NEC2::save("yagi.nec", @yagi);
+
+my @yagi = yagi(get_simplex_vars($vec_initial));
+NEC2::save("$filename_nec", @yagi);
 print @yagi;
 
-if ( -e "yagi.nec.csv" ) {
+if ( -e "$filename_nec_csv" ) {
 	print "\n=== Goal Status ===\n";
-	my $csv = load_csv("yagi.nec.csv");
+	my $csv = load_csv("$filename_nec_csv");
 	goal_eval_all($config->{goals}, $vec_initial, $csv);
 }
 
-print "\nOpen xnec2c and select File->Optimizer Output. Then you may press enter to begin.\n";
+my $ncpus = `grep -c processor /proc/cpuinfo`; chomp $ncpus;
+
+print "\n===== Ready ==== \n";
+print "Writing NEC2 output to $filename_nec\n";
+print "Open \`xnec2c -j $ncpus $filename_nec\` and select File->Optimizer Output. Then you may press enter to begin.\n";
 <STDIN>;
 
 
@@ -56,8 +74,8 @@ f($vec_optimal);
 my $x = $vec_optimal->slice('(0)');
 print "opt_ssize=$opt_ssize  opt=$x -> minima=$optval\n";
 
-print "\n===== yagi.nec ==== \n";
-system("cat yagi.nec");
+print "\n===== $filename_nec ==== \n";
+system("cat $filename_nec");
 
 exit 0;
 
@@ -240,16 +258,16 @@ sub f
 	my ($vec) = @_;
 
 	my $inotify = Linux::Inotify2->new;
-	$inotify->watch("yagi.nec.csv", IN_CLOSE_WRITE)
-		or die "inotify: $!: yagi.nec.csv";
+	$inotify->watch("$filename_nec_csv", IN_CLOSE_WRITE)
+		or die "inotify: $!: $filename_nec_csv";
 
 	# save and wait for the CSV to be written:
 	
 
-	NEC2::save("yagi.nec", yagi(get_simplex_vars($vars, $vec)));
+	NEC2::save("$filename_nec", yagi(get_simplex_vars($vec)));
 	$inotify->read;
 
-	my $csv = load_csv("yagi.nec.csv");
+	my $csv = load_csv("$filename_nec_csv");
 
 	# Whatever vector format $vec->slice("(0)") is, $ret must be also.
 	# So slice it, multiply times zero, and then add whatever you need:
@@ -269,8 +287,8 @@ sub log
 
 	my $minima = $vec->slice("(0)", 0);
 	
-	my $lengths = get_simplex_var($vars, $vec, 'lengths');
-	my $spaces = get_simplex_var($vars, $vec, 'spaces');
+	my $lengths = get_simplex_var($vec, 'lengths');
+	my $spaces = get_simplex_var($vec, 'spaces');
 
 	#print "f: vec=$vec\n";
 	print "f: lengths=[" . join(', ', @$lengths) . "]\n";
@@ -348,7 +366,9 @@ sub build_simplex_vars
 
 sub get_simplex_var
 {
-	my ($vars, $pdl, $var_name) = @_;
+	my ($pdl, $var_name) = @_;
+
+	my $vars = $config->{geometry};
 
 	my @ret;
 	
@@ -388,13 +408,15 @@ sub get_simplex_var
 
 sub get_simplex_vars
 {
-	my ($vars, $pdl) = @_;	
+	my ($pdl) = @_;	
 	
+	my $vars = $config->{geometry};
+
 	my %h;
 
 	foreach my $var (keys %$vars)
 	{
-		$h{$var} = get_simplex_var($vars, $pdl, $var);
+		$h{$var} = get_simplex_var($pdl, $var);
 	}
 
 	return %h;
