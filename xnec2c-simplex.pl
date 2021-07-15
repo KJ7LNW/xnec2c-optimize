@@ -29,6 +29,7 @@ $filename_nec     .= ".nec";
 $filename_nec_csv = "$filename_nec.csv";
 
 my $config = do($filename_config);
+die $@ if $@;
 #print Dumper $config;
 #exit;
 
@@ -162,6 +163,9 @@ sub goal_eval
 	elsif ($type eq 'min') { $ret = $min; }
 	elsif ($type eq 'max') { $ret = $max; }
 	elsif ($type eq 'mag') { $ret = $mag; }
+	elsif ($type eq 'diff') { $ret = $max - $min; }
+	elsif ($type eq '+diff') { $ret = $max - $min; }
+	elsif ($type eq '-diff') { $ret = -($max - $min); }
 
 	$ret *= $weight;
 
@@ -195,7 +199,7 @@ sub yagi
 	print "yagi: lengths=[" . join(', ', @$lengths) . "]\n";
 	print "yagi: spaces=[" . join(', ', @$spaces) . "]\n";
 
-	my $n_segments = 11; # must be odd!
+	my $n_segments = $vars{wire_segments}->[0] ; # must be odd!
 	my $ex_seg = int($n_segments / 2) + 1;
 
 	#print "lengths: $lengths\n";
@@ -223,7 +227,7 @@ sub yagi
 				ns  => $n_segments,
 				x   => $l, x2  => -$l,
 				z   => $zoff, z2  => $zoff, 
-				rad => 0.002
+				rad => $vars{wire_rad}->[0]
 
 			)
 		);
