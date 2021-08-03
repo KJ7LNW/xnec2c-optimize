@@ -20,6 +20,8 @@ sub new
 {
 	my ($class, %args) = @_;
 
+	die "NEC2::Card->new called with a ref?" if ref ($class);
+
 	my %h;
 
 	my $self = bless({}, $class);
@@ -35,7 +37,7 @@ sub new
 	{
 		$self->{card} = [ map { 0 } (1..10) ]
 	}
-	else
+	elsif (ref($self) !~ /NEC2::Card::C[ME]/) # ignore comment cards, not geo nor program.
 	{
 		die "Unknown card type: $class";
 	}
@@ -72,13 +74,19 @@ sub defaults
 sub geo_cards
 {
 	my $self = shift;
-	return ($self);
+
+	return $self if ($self->is_geo_card());
+	return ();
+
 }
 
 # Used for antenna models that may return program cards such as EX
 # for the excited element to drive the antenna.
 sub program_cards
 {
+	my $self = shift;
+
+	return $self if ($self->is_program_card());
 	return ();
 }
 
@@ -173,7 +181,7 @@ sub is_program_card
 {
 	my $self = shift;
 	my $card_name = $self->card_name;
-	return scalar(grep { $_ eq $card_name } geo_card_names());
+	return scalar(grep { $_ eq $card_name } program_card_names());
 }
 
 
@@ -202,6 +210,7 @@ sub _get_var_idx
 		die "Variable cycle detected for class " . ref($self) . ": $var" if $depth++ > 10;
 	}
 
+	die "Card index is undefined for class " . ref($self) . ": $var\n" if (!defined($idx));
 
 	return $idx;
 }

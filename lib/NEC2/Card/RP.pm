@@ -25,30 +25,30 @@ sub param_map
 {
 	my ($self, $key) = @_;
 	return {
-		type          => 'I1',
+		type          => 'i1',
 
-		nth           => 'I2',
-		n_theta       => 'I2',
+		nth           => 'i2',
+		n_theta       => 'i2',
 
-		nph           => 'I3',
-		n_phi         => 'I3',
+		nph           => 'i3',
+		n_phi         => 'i3',
 
-		xnda          => 'I4',
+		xnda          => 'i4',
 		
-		thets         => 'F1',
-		theta_initial => 'F1',
+		thets         => 'f1',
+		theta_initial => 'f1',
 		
-		phis          => 'F2',
-		phi_initial   => 'F2',
+		phis          => 'f2',
+		phi_initial   => 'f2',
 		
-		dth           => 'F3',
-		theta_inc     => 'F3',
+		dth           => 'f3',
+		theta_inc     => 'f3',
 
-		dph           => 'F4',
-		phi_inc       => 'F4',
+		dph           => 'f4',
+		phi_inc       => 'f4',
 
-		rfld          => 'F5',
-		gnor          => 'F6',
+		rfld          => 'f5',
+		gnor          => 'f6',
 	}->{$key};
 }
 

@@ -26,8 +26,8 @@ sub param_map
 	return {
 		i1 => 0,
 
-		gpflag => 'I1',
-		ground => 'I1'
+		gpflag => 'i1',
+		ground => 'i1'
 	}->{$key};
 }
 

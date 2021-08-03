@@ -7,7 +7,7 @@ use Exporter;
 
 use Carp;
 
-$SIG{__DIE__} = sub { Carp::confess() };
+$SIG{__DIE__} = sub { Carp::confess(); print Carp::longmess; };
 
 use NEC2::Card::CM;
 use NEC2::Card::EN;
@@ -41,24 +41,81 @@ BEGIN {
 }
 
 
-#####################################################################
-# Static Functions
+sub new 
+{
+	my ($class, %args) = @_;
+
+	my $self = bless(\%args, $class);
+
+	$self->{comment} //= 'A blank comment';
+
+	return $self;
+}
+
+sub add
+{
+	my ($self, @cards) = @_;
+
+	foreach my $card (@cards)
+	{
+		push @{ $self->{geo_cards} }, $card->geo_cards();
+		push @{ $self->{program_cards} }, $card->program_cards();
+	}
+
+	return $self;
+}
+
+
+sub geo_cards
+{
+	my $self = shift;
+	return @{ $self->{geo_cards} };
+}
+
+sub program_cards
+{
+	my $self = shift;
+	return grep { $_->card_name ne 'EN' } @{ $self->{program_cards} };
+}
 
 sub save
 {
-	my ($fn, @structure) = @_;
+	my ($self, $fn, @structure) = @_;
 
 	open(my $structure, "|column -t > $fn") or die "$!: $fn";
 
-	print $structure @structure;
+	print $structure CM(comment => $self->{comment});
+	print $structure CE();
+	
+	# always put the GE card at the end of the geometry.  Default to freespace GE if
+	# none was defined:
+	my ($GE) = grep { $_->card_name eq 'GE' } $self->geo_cards();
+	$GE //= GE();
+
+	my @geo = grep { $_->card_name ne 'GE' } $self->geo_cards();
+
+	# exclude EN cards because they go at the end:
+	my @program = grep { $_->card_name ne 'EN' } $self->program_cards();
+
+	print $structure @geo;
+	print $structure $GE;
+
+	print $structure @program;
+	print $structure EN();
 
 	close($structure);
 }
 
 
+#####################################################################
+# Static Functions
 
 ###########################################################
 # Card shortcuts:
+
+# Comment cards
+sub CM { return NEC2::Card::CM->new(@_) }  # Arc
+sub CE { return NEC2::Card::CE->new(@_) }  # Arc
 
 # Geo cards
 sub GA { return NEC2::Card::GA->new(@_) }  # Arc

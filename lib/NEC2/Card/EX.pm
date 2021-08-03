@@ -18,14 +18,14 @@ sub param_map
 	return {
 		NEC2::Card::program_card_param_maps(),
 
-		type        =>  'I1',
-		ex_tag      =>  'I2',
+		type        =>  'i1',
+		ex_tag      =>  'i2',
 		
-		ex_seg      =>  'I3',
-		ex_segment  =>  'I3',
+		ex_seg      =>  'i3',
+		ex_segment  =>  'i3',
 		
-		v_real      =>  'F1',
-		v_imag      =>  'F2',
+		v_real      =>  'i1',
+		v_imag      =>  'i2',
 	}->{$key};
 }
 

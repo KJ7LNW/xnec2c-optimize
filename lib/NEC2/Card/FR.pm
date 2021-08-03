@@ -20,14 +20,14 @@ sub param_map
 	return {
 		NEC2::Card::program_card_param_maps(),
 
-		type          => 'I1',
-		n_freq        => 'I2',
-		mhz           => 'F1',
-		mhz_min       => 'F1',
+		type          => 'i1',
+		n_freq        => 'i2',
+		mhz           => 'f1',
+		mhz_min       => 'f1',
 
-		mhz_inc       => 'F2',
-		mhz_step      => 'F2',
-		delfrq        => 'F2',
+		mhz_inc       => 'f2',
+		mhz_step      => 'f2',
+		delfrq        => 'f2',
 	}->{$key};
 }
 
