@@ -1,9 +1,9 @@
-package NEC2::EX;
+package NEC2::Card::EX;
 
 use strict;
 use warnings;
 
-use parent 'NEC2';
+use parent 'NEC2::Card';
 
 sub defaults 
 {
@@ -16,7 +16,7 @@ sub param_map
 {
 	my ($self, $key) = @_;
 	return {
-		NEC2::program_card_param_maps(),
+		NEC2::Card::program_card_param_maps(),
 
 		type        =>  'I1',
 		ex_tag      =>  'I2',

@@ -1,9 +1,9 @@
-package NEC2::FR;
+package NEC2::Card::FR;
 
 use strict;
 use warnings;
 
-use parent 'NEC2';
+use parent 'NEC2::Card';
 
 # default to 10 steps in the 2m amature radio band:
 sub defaults
@@ -18,7 +18,7 @@ sub param_map
 {
 	my ($self, $key) = @_;
 	return {
-		NEC2::program_card_param_maps(),
+		NEC2::Card::program_card_param_maps(),
 
 		type          => 'I1',
 		n_freq        => 'I2',

@@ -1,11 +1,11 @@
-package NEC2::RP;
+package NEC2::Card::RP;
 
 use strict;
 use warnings;
 
-use parent 'NEC2';
+use parent 'NEC2::Card';
 
-# Note: see below for NEC2::RP::Freespace and NEC2::RP::Ground
+# Note: see below for NEC2::Card::RP::Freespace and NEC2::Card::RP::Ground
 
 sub defaults
 {
@@ -56,14 +56,14 @@ sub param_map
 
 
 # No ground, 360-degrees of phi (same as above)
-package NEC2::RP::Freespace;
-use parent 'NEC2::RP';
+package NEC2::Card::RP::Freespace;
+use parent 'NEC2::Card::RP';
 1;
 
 
 # With ground, only 180-degrees of theta
-package NEC2::RP::Ground;
-use parent 'NEC2::RP';
+package NEC2::Card::RP::Ground;
+use parent 'NEC2::Card::RP';
 
 sub defaults
 {

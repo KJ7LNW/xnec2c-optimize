@@ -1,9 +1,9 @@
-package NEC2::GA;
+package NEC2::Card::GA;
 
 use strict;
 use warnings;
 
-use parent 'NEC2';
+use parent 'NEC2::Card';
 
 sub defaults 
 {
@@ -15,7 +15,7 @@ sub param_map
 {
 	my ($self, $key) = @_;
 	return {
-		NEC2::geo_card_param_maps(),
+		NEC2::Card::geo_card_param_maps(),
 
 		itg       =>  'i1',
 		tag       =>  'i1',

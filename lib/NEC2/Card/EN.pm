@@ -1,5 +1,5 @@
-package NEC2::EN;
-use parent 'NEC2';
+package NEC2::Card::EN;
+use parent 'NEC2::Card';
 
 1;
 

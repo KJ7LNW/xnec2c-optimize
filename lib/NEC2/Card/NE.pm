@@ -1,9 +1,9 @@
-package NEC2::NE;
+package NEC2::Card::NE;
 
 use strict;
 use warnings;
 
-use parent 'NEC2';
+use parent 'NEC2::Card';
 
 sub defaults
 {
@@ -15,7 +15,7 @@ sub param_map
 {
 	my ($self, $key) = @_;
 	return {
-		NEC2::program_card_param_maps(),
+		NEC2::Card::program_card_param_maps(),
 		near => 'i1',
 
 		# rectangular coordinates (near = 0):
@@ -49,7 +49,7 @@ sub param_map
 
 1;
 
-package NEC2::NH;
+package NEC2::Card::NH;
 
-use parent 'NEC2::NE';
+use parent 'NEC2::Card::NE';
 1;

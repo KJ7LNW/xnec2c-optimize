@@ -1,9 +1,9 @@
-package NEC2::CM;
+package NEC2::Card::CM;
 
 use strict;
 use warnings;
 
-use parent 'NEC2';
+use parent 'NEC2::Card';
 
 sub param_map
 {
@@ -15,7 +15,7 @@ sub param_map
 
 
 # Nothing special about CE, so use CM.
-package NEC2::CE;
-use parent 'NEC2::CM';
+package NEC2::Card::CE;
+use parent 'NEC2::Card::CM';
 
 1;

@@ -1,16 +1,16 @@
-package NEC2::SP;
+package NEC2::Card::SP;
 
 use strict;
 use warnings;
 
-use parent 'NEC2';
+use parent 'NEC2::Card';
 
 
 sub param_map
 {
 	my ($self, $key) = @_;
 	return {
-		NEC2::geo_card_param_maps(),
+		NEC2::Card::geo_card_param_maps(),
 
 		ns =>  'i2',
 		shape =>  'i2',
@@ -65,7 +65,7 @@ sub geo_cards
 	if ($self->get('ns') =~ /^[123]$/)
 	{
 		push @cards,
-			NEC2::SC->new(
+			NEC2::Card::SC->new(
 				i2 => $self->get('ns'),
 				x3 => $self->{x3}, 
 				y3 => $self->{y3}, 

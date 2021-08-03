@@ -1,9 +1,9 @@
-package NEC2::GW;
+package NEC2::Card::GW;
 
 use strict;
 use warnings;
 
-use parent 'NEC2';
+use parent 'NEC2::Card';
 
 # this is a multi-card card when rad = 0, see the GC card documented on the GW page.
 # GC is added below in the overloaded geo_cards() function.
@@ -18,7 +18,7 @@ sub param_map
 {
 	my ($self, $key) = @_;
 	return {
-		NEC2::geo_card_param_maps(),
+		NEC2::Card::geo_card_param_maps(),
 
 		# original NEC2 terms:
 		itg  =>          'i1',
@@ -63,7 +63,7 @@ sub geo_cards
 		}
 
 		push @cards,
-			NEC2::GC->new(
+			NEC2::Card::GC->new(
 				rdel => $self->{rdel}, 
 				rad1 => $self->{rad1}, 
 				rad2 => $self->{rad2});

@@ -1,9 +1,9 @@
-package NEC2::GE;
+package NEC2::Card::GE;
 
 use strict;
 use warnings;
 
-use parent 'NEC2';
+use parent 'NEC2::Card';
 
 sub defaults
 {
