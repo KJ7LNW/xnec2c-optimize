@@ -9,15 +9,31 @@ use parent 'NEC2::Card';
 
 sub defaults
 {
-	return (
-		type => 0,
-		n_theta => 19,
-		n_phi => 37,
-		xnda => '1000',
-		theta_initial => 0,
-		phi_initial => 0,
-		theta_inc => 10,
-		phi_inc => 10);
+	return (ground => 0);
+}
+
+sub set_special
+{
+	my ($self, $var, $val) = @_;
+
+	# If ground is nonzero then use the defaults for having a ground.
+	# Setting 'ground' will reset all other defaults so set it first
+	# before changing other values.
+	if ($var eq 'ground')
+	{
+		if ($val)
+		{
+			$self->set(NEC2::Card::RP::Ground::defaults());
+		}
+		else 
+		{
+			$self->set(NEC2::Card::RP::Freespace::defaults());
+		}
+
+		return 1;
+	}
+
+	return 0;
 }
 
 # short-hand terms:
@@ -25,6 +41,8 @@ sub param_map
 {
 	my ($self, $key) = @_;
 	return {
+		NEC2::Card::program_card_param_maps(),
+
 		type          => 'i1',
 
 		nth           => 'i2',
@@ -58,6 +76,20 @@ sub param_map
 # No ground, 360-degrees of phi (same as above)
 package NEC2::Card::RP::Freespace;
 use parent 'NEC2::Card::RP';
+
+sub defaults
+{
+	return (
+		type => 0,
+		n_theta => 19,
+		n_phi => 37,
+		xnda => '1000',
+		theta_initial => 0,
+		phi_initial => 0,
+		theta_inc => 10,
+		phi_inc => 10);
+}
+
 1;
 
 

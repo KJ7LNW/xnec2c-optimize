@@ -9,7 +9,7 @@ use parent 'NEC2::Card';
 sub defaults
 {
 	# note that NEC2 does not define mhz_max, it is calculated in the 
-	# overloaded set() function below.
+	# overloaded set_special() function below.
 	return (type => 0, n_freq => 10, mhz_min => 144, mhz_max => 148);
 }
 
@@ -31,10 +31,7 @@ sub param_map
 	}->{$key};
 }
 
-1;
-
-# Hook set() from the parent class to do some math:
-sub set
+sub set_special
 {
 	my ($self, $var, $val) = @_;
 
@@ -42,50 +39,52 @@ sub set
 	{
 		my $n_freq = $self->get('n_freq');
 		my $mhz_min = $self->get('mhz_min');
-		my $mhz_max = $var;
+		my $mhz_max = $val;
+
+		die "FR: mhz_min must be defined before mhz_max, tis needed for calculation" if (!defined($mhz_min));
 
 		if ($n_freq <= 1)
 		{
-			$self->SUPER::set('mhz_inc', 0);
+			$self->set_card_var('mhz_inc', 0);
 		}
 		else
 		{
-			die "mhz_min !< mhz_max: $mhz_min !< $mhz_max" if ($mhz_min >= $mhz_max);
+			die "FR: mhz_min !< mhz_max: $mhz_min !< $mhz_max" if ($mhz_min >= $mhz_max);
 
 			# save for later if mhz_min if changed
 			$self->{mhz_max} = $mhz_max;
 
 			# set mhz_inc accordingly:
-			$self->SUPER::set('mhz_inc', ($mhz_max - $mhz_min) / ($n_freq-1))
+			$self->set_card_var('mhz_inc', ($mhz_max - $mhz_min) / ($n_freq-1))
 		}
 	}
 	elsif ($var eq 'mhz_min')
 	{
-		# First, this is an NEC2 variable so set it:
-		$self->SUPER::set('mhz_min', $val);
+		# First, this _is_ an NEC2 variable so set it:
+		$self->set_card_var('mhz_min', $val);
 
 		my $n_freq = $self->get('n_freq');
 		if ($n_freq <= 1)
 		{
-			$self->SUPER::set('mhz_inc', 0);
+			$self->set_card_var('mhz_inc', 0);
 		}
-		elsif ($self->get('mhz_max'))
+		elsif ($self->{mhz_max})
 		{
-			my $mhz_min = $var;
-			my $mhz_max = $self->get('mhz_max');
+			my $mhz_min = $val;
+			my $mhz_max = $self->{mhz_max};
 
 			die "mhz_min !< mhz_max: $mhz_min !< $mhz_max" if ($mhz_min >= $mhz_max);
 
-			$self->SUPER::set('mhz_inc', ($mhz_max - $mhz_min) / ($n_freq-1))
+			$self->set_card_var('mhz_inc', ($mhz_max - $mhz_min) / ($n_freq-1))
 		}
 	}
 	else
 	{
-		$self->SUPER::set($var, $val);
+		return 0;
 	}
 
-	
-
-	return $self;
+	return 1;
 }
+
+1;
 
