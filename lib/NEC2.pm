@@ -40,6 +40,7 @@ BEGIN {
 	);
 }
 
+use overload '""' => \&stringify;
 
 sub new 
 {
@@ -78,14 +79,14 @@ sub program_cards
 	return grep { $_->card_name ne 'EN' } @{ $self->{program_cards} };
 }
 
-sub save
+sub stringify
 {
-	my ($self, $fn, @structure) = @_;
+	my ($self) = @_;
 
-	open(my $structure, "|column -t > $fn") or die "$!: $fn";
+	my $ret = '';
 
-	print $structure CM(comment => $self->{comment});
-	print $structure CE();
+	$ret .= CM(comment => $self->{comment});
+	$ret .= CE();
 	
 	# always put the GE card at the end of the geometry.  Default to freespace GE if
 	# none was defined:
@@ -97,12 +98,22 @@ sub save
 	# exclude EN cards because they go at the end:
 	my @program = grep { $_->card_name ne 'EN' } $self->program_cards();
 
-	print $structure @geo;
-	print $structure $GE;
+	$ret .= join('', @geo);
+	$ret .= $GE;
 
-	print $structure @program;
-	print $structure EN();
+	$ret .= join('', map { "$_" } @program);
+	$ret .= EN();
 
+	return $ret;
+}
+
+sub save
+{
+	my ($self, $fn, @structure) = @_;
+
+	open(my $structure, "|column -t > $fn") or die "$!: $fn";
+
+	print $structure $self;
 	close($structure);
 }
 

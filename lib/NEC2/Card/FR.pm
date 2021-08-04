@@ -29,59 +29,53 @@ sub param_map
 	};
 }
 
+
 sub set_special
 {
 	my ($self, $var, $val) = @_;
 
 	if ($var eq 'mhz_max')
 	{
-		my $n_freq = $self->get('n_freq');
-		my $mhz_min = $self->get('mhz_min');
-		my $mhz_max = $val;
-
-		die "FR: mhz_min must be defined before mhz_max, tis needed for calculation" if (!defined($mhz_min));
-
-		if ($n_freq <= 1)
-		{
-			$self->set_card_var('mhz_inc', 0);
-		}
-		else
-		{
-			die "FR: mhz_min !< mhz_max: $mhz_min !< $mhz_max" if ($mhz_min >= $mhz_max);
-
-			# save for later if mhz_min if changed
-			$self->{mhz_max} = $mhz_max;
-
-			# set mhz_inc accordingly:
-			$self->set_card_var('mhz_inc', ($mhz_max - $mhz_min) / ($n_freq-1))
-		}
+		$self->{mhz_max} = $val;
 	}
-	elsif ($var eq 'mhz_min')
+	elsif ($var eq 'mhz_inc')
 	{
-		# First, this _is_ an NEC2 variable so set it:
-		$self->set_card_var('mhz_min', $val);
-
-		my $n_freq = $self->get('n_freq');
-		if ($n_freq <= 1)
-		{
-			$self->set_card_var('mhz_inc', 0);
-		}
-		elsif ($self->{mhz_max})
-		{
-			my $mhz_min = $val;
-			my $mhz_max = $self->{mhz_max};
-
-			die "mhz_min !< mhz_max: $mhz_min !< $mhz_max" if ($mhz_min >= $mhz_max);
-
-			$self->set_card_var('mhz_inc', ($mhz_max - $mhz_min) / ($n_freq-1))
-		}
+		# If they specify mhz_inc, then mhz_max is (probably) no longer valid
+		delete $self->{mhz_max};
+	}
+	elsif ($var eq 'mhz_min' || $var eq 'n_freq')
+	{
+		$self->set_card_var($var, $val);
 	}
 	else
 	{
 		return 0;
 	}
 
+	$self->_FR_update_mhz_min_max();
+
 	return 1;
+}
+
+sub _FR_update_mhz_min_max
+{
+	my $self = shift;
+
+	my $n_freq = $self->get('n_freq');
+	my $mhz_min = $self->get('mhz_min');
+	my $mhz_max = $self->{mhz_max};
+
+	if ($n_freq <= 1)
+	{
+		$self->set_card_var('mhz_inc', 0);
+	}
+	elsif (defined($self->{mhz_max}))
+	{
+		die "FR: mhz_min !< mhz_max: $mhz_min !< $mhz_max" if ($mhz_min >= $mhz_max);
+
+		# set mhz_inc accordingly:
+		$self->set_card_var('mhz_inc', ($mhz_max - $mhz_min) / ($n_freq-1))
+	}
 }
 
 1;

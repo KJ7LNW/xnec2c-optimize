@@ -18,7 +18,7 @@ sub stringify
 
 sub new
 {
-	my ($class, %args) = @_;
+	my ($class, @args) = @_;
 
 	die "NEC2::Card->new called with a ref?" if ref ($class);
 
@@ -42,11 +42,20 @@ sub new
 		die "Unknown card type: $class";
 	}
 	
-	# Set class defaults
-	$self->set($class->defaults);
+	# Exclude defaults that are defined in @args so they only get
+	# set once.  This is important for things like FR's mhz_min and
+	# mhz_max that will break if they are done out of order, especially
+	# if the defaults do not maintain a min<max relationship with the
+	# ones provided by the user
+	my %defaults = $class->defaults;
+	for (my $i = 0; $i < @args; $i += 2)
+	{
+		delete $defaults{$args[$i]};
+	}
 
-	# Set passed values, the user may override card => [ ... ] if they wish:
-	$self->set(%args);
+	# Set passed values.
+	# Note that the order is important here, so we pass a list not a hash:
+	$self->set(%defaults, @args);
 
 	return $self;
 }
@@ -204,6 +213,7 @@ sub set
 	# like FR's mhz_min and mhz_max are order-dependent.
 	while (my ($var, $val) = splice(@var_vals, 0, 2)) 
 	{
+		#print $self->card_name . ": $var => $val\n";
 		$self->set_one($var, $val);
 	}
 

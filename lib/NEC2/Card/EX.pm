@@ -22,8 +22,8 @@ sub param_map
 		ex_seg      =>  'i3',
 		ex_segment  =>  'i3',
 		
-		v_real      =>  'i1',
-		v_imag      =>  'i2',
+		v_real      =>  'f1',
+		v_imag      =>  'f2',
 	};
 }
 
