@@ -57,19 +57,16 @@ sub new
 
 # Map friendly names to NEC2 registers like I1, F2, ...  
 # Must be overriden by child class.
-sub get_param_map
+sub param_map
 {
-	my ($self) = @_;
+	my $self = shift;
 
-	my $map = $self->param_map;
+	die "Incomplete class, param_map must be defined: ".ref($self);
 
-	my %type_map;
-	%type_map = program_card_param_maps() if ($self->is_program_card);
-	%type_map = geo_card_param_maps() if ($self->is_geo_card);
-
-	return { %$map, %type_map };
+	# Should return { var => 'f1', ... mappings };
 }
 
+# Default values for classes to instantiate without arguments
 sub defaults
 {
 	return ()
@@ -136,6 +133,7 @@ sub set_special
 #####################################################################
 # Core functions
 # get card (or class) value:
+#
 sub get
 {
 	my ($self, $var) = @_;
@@ -260,7 +258,7 @@ sub _get_var_idx
 	$var = lc($var);
 
 	my $idx = $var;
-	my $param_map = $self->get_param_map();
+	my $param_map = $self->_get_param_map();
 
 	# If the param_map returns a non-integer then remap it
 	my $depth = 0; 
@@ -274,7 +272,21 @@ sub _get_var_idx
 	return $idx;
 }
 
-sub program_card_param_maps
+# build the paramater map based on the card type.
+sub _get_param_map
+{
+	my ($self) = @_;
+
+	my $map = $self->param_map;
+
+	my %type_map;
+	%type_map = _program_card_param_maps() if ($self->is_program_card);
+	%type_map = _geo_card_param_maps() if ($self->is_geo_card);
+
+	return { %$map, %type_map };
+}
+
+sub _program_card_param_maps
 {
 
 	# nec card names, can be overridden in the child class:
@@ -295,7 +307,7 @@ sub program_card_param_maps
 
 }
 
-sub geo_card_param_maps
+sub _geo_card_param_maps
 {
 
 	# nec card names, can be overridden in the child class:
@@ -312,7 +324,6 @@ sub geo_card_param_maps
 		f5 => 6,
 		f6 => 7,
 		f7 => 8);
-
 }
 
 1;
