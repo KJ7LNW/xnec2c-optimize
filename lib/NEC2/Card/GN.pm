@@ -13,7 +13,6 @@ sub defaults
 
 sub param_map
 {
-	my ($self, $key) = @_;
 	return {
 		type             =>          'i1',
 		n_radials        =>          'i2',

@@ -39,7 +39,6 @@ sub set_special
 # short-hand terms:
 sub param_map
 {
-	my ($self, $key) = @_;
 	return {
 
 		type          => 'i1',

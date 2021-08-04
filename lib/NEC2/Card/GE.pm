@@ -22,7 +22,6 @@ sub defaults
 
 sub param_map
 {
-	my ($self, $key) = @_;
 	return {
 		i1 => 0,
 

@@ -8,7 +8,6 @@ use parent 'NEC2::Card';
 
 sub param_map
 {
-	my ($self, $key) = @_;
 	return {
 
 		ns =>  'i2',

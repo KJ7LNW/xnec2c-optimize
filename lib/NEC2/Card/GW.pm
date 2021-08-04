@@ -16,7 +16,6 @@ sub defaults
 
 sub param_map
 {
-	my ($self, $key) = @_;
 	return {
 
 		# original NEC2 terms:

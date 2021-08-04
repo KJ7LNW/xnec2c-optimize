@@ -14,7 +14,6 @@ sub defaults
 # human-readable terms, some have multiple aliases for the same thing:
 sub param_map
 {
-	my ($self, $key) = @_;
 	return {
 
 		type        =>  'i1',
