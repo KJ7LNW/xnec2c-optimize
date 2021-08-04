@@ -15,7 +15,6 @@ sub param_map
 {
 	my ($self, $key) = @_;
 	return {
-		NEC2::Card::program_card_param_maps(),
 		near => 'i1',
 
 		# rectangular coordinates (near = 0):
@@ -44,7 +43,7 @@ sub param_map
 		step_phi    =>  'f5',
 		step_theta  =>  'f6',
 
-	}->{$key};
+	};
 }
 
 1;

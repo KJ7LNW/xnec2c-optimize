@@ -10,7 +10,6 @@ sub param_map
 {
 	my ($self, $key) = @_;
 	return {
-		NEC2::Card::geo_card_param_maps(),
 
 		ns =>  'i2',
 		shape =>  'i2',
@@ -28,7 +27,7 @@ sub param_map
 		z2 =>  'f6',
 		area =>  'f6',
 
-	}->{$key};
+	};
 }
 
 sub geo_cards

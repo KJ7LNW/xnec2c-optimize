@@ -41,7 +41,6 @@ sub param_map
 {
 	my ($self, $key) = @_;
 	return {
-		NEC2::Card::program_card_param_maps(),
 
 		type          => 'i1',
 
@@ -67,7 +66,7 @@ sub param_map
 
 		rfld          => 'f5',
 		gnor          => 'f6',
-	}->{$key};
+	};
 }
 
 1;

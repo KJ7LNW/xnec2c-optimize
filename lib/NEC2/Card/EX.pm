@@ -16,7 +16,6 @@ sub param_map
 {
 	my ($self, $key) = @_;
 	return {
-		NEC2::Card::program_card_param_maps(),
 
 		type        =>  'i1',
 		ex_tag      =>  'i2',
@@ -26,7 +25,7 @@ sub param_map
 		
 		v_real      =>  'i1',
 		v_imag      =>  'i2',
-	}->{$key};
+	};
 }
 
 1;

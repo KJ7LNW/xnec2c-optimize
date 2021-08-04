@@ -57,10 +57,17 @@ sub new
 
 # Map friendly names to NEC2 registers like I1, F2, ...  
 # Must be overriden by child class.
-sub param_map
+sub get_param_map
 {
-	my ($self, $param) = @_;
-	die "param_map: cannot map $param, incomplete class: " . ref($self);
+	my ($self) = @_;
+
+	my $map = $self->param_map;
+
+	my %type_map;
+	%type_map = program_card_param_maps() if ($self->is_program_card);
+	%type_map = geo_card_param_maps() if ($self->is_geo_card);
+
+	return { %$map, %type_map };
 }
 
 sub defaults
@@ -90,23 +97,6 @@ sub program_cards
 	return ();
 }
 
-# The child class may override this for creating internal "variables"
-# that can be used to configure the class.  See FR's mhz_max feature:
-# example: $self->set(tag => 3, f4 => 7, ...)
-sub set
-{
-	my ($self, %vars) = @_;
-
-	foreach my $var (keys(%vars)) 
-	{
-		my $idx = $self->_get_var_idx($var);
-
-		$self->{card}->[$idx] = $vars{$var};
-	}
-
-	# return object for easy chaining
-	return $self;
-}
 
 # Override this if the card name doesn't take the format of
 # NEC2::(CARDNAME) from the class
@@ -127,6 +117,22 @@ sub card_name
 }
 
 
+# The child class may create internal "special variables" by
+# implementing set_special and get_special.  
+# get_special must return a defined value if the variable is defined. See FR's mhz_max feature.
+sub get_special
+{
+	return undef;
+}
+
+# set_special must return a true value if that variable is supported.
+# Note that this true/false return behavior for set is different than
+# the defined/undefined return behavior for get.
+sub set_special
+{
+	return 0;
+}
+
 #####################################################################
 # Core functions
 # get card (or class) value:
@@ -134,27 +140,82 @@ sub get
 {
 	my ($self, $var) = @_;
 
-	my $idx = $self->_get_var_idx($var);
+	my $val = $self->get_special($var);
 
-	if (!defined $idx && !defined($self->{$var}))
+	if (!defined $val) 
 	{
-		# fail if undefined:
-		die "Unknown var for class " . ref($self) . ": $var" if !defined($idx);
+		my $idx = $self->_get_var_idx($var);
+		if (defined($idx))
+		{
+			$val = $self->{card}->[$idx];
+		}
 	}
-	elsif (!defined $idx && defined($self->{$var}))
+
+	if (!defined($val))
 	{
-		# return the class var if defined:
-		return $self->{$var};
+		die "Unknown var for class " . ref($self) . ": $var";
+	}
+
+	return $val;
+}
+
+# directly sets a card variable, will not call set_special().
+sub set_card_var
+{
+	my ($self, $var, $val) = @_;
+
+	my $idx = $self->_get_var_idx($var);
+	if (!defined $idx) 
+	{
+		die "Unknown var for class " . ref($self) . ": $var";
 	}
 	else
 	{
-		return $self->{card}->[$idx];
+		$self->{card}->[$idx] = $val;
 	}
+
+	return $self;
+}
+
+# Sets a single var, val tuple.
+sub set_one
+{
+	my ($self, $var, $val) = @_;
+
+	our $depth++;
+	die "set_one: depth is too deep (maybe set_card_var instead of set?): $var => $val" if ($depth > 10);
+
+	# first try set_special in case the value is overriden:
+	if (!$self->set_special($var, $val))
+	{
+		$self->set_card_var($var, $val);
+	}
+
+	$depth--;
+
+	return $self;
+}
+
+# Sets a hash of values:
+# example: $self->set(tag => 3, f4 => 7, ...)
+sub set
+{
+	my ($self, @var_vals) = @_;
+
+	# maintain the order of the list because some vars
+	# like FR's mhz_min and mhz_max are order-dependent.
+	while (my ($var, $val) = splice(@var_vals, 0, 2)) 
+	{
+		$self->set_one($var, $val);
+	}
+
+	# return object for easy chaining
+	return $self;
 }
 
 
 #####################################################################
-# Classful helper functions, not intended for overloading.
+# Classful functions, not intended for overloading.
 
 sub card_vals
 {
@@ -198,19 +259,17 @@ sub _get_var_idx
 	# always lowercase
 	$var = lc($var);
 
-	# use the class names if they exist:
-	my $idx = $self->param_map($var);
+	my $idx = $var;
+	my $param_map = $self->get_param_map();
 
 	# If the param_map returns a non-integer then remap it
 	my $depth = 0; 
 	while (defined($idx) && $idx !~ /^[0-9]+$/)
 	{
-		$idx = $self->param_map($idx);
+		$idx = $param_map->{$idx};
 		#print "$var: $idx\n";
 		die "Variable cycle detected for class " . ref($self) . ": $var" if $depth++ > 10;
 	}
-
-	die "Card index is undefined for class " . ref($self) . ": $var\n" if (!defined($idx));
 
 	return $idx;
 }

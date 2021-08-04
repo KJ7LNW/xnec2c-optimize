@@ -18,7 +18,6 @@ sub param_map
 {
 	my ($self, $key) = @_;
 	return {
-		NEC2::Card::program_card_param_maps(),
 
 		type          => 'i1',
 		n_freq        => 'i2',
@@ -28,7 +27,7 @@ sub param_map
 		mhz_inc       => 'f2',
 		mhz_step      => 'f2',
 		delfrq        => 'f2',
-	}->{$key};
+	};
 }
 
 sub set_special

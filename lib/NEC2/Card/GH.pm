@@ -15,7 +15,6 @@ sub param_map
 {
 	my ($self, $key) = @_;
 	return {
-		NEC2::Card::geo_card_param_maps(),
 
 		itg       =>  'i1',
 		tag       =>  'i1',
@@ -42,7 +41,7 @@ sub param_map
 
 		rad       =>  'f7',
 		wire_rad  =>  'f7',
-	}->{$key};
+	};
 }
 
 sub set_special

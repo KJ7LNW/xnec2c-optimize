@@ -28,7 +28,7 @@ sub param_map
 
 		gpflag => 'i1',
 		ground => 'i1'
-	}->{$key};
+	};
 }
 
 1;

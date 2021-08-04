@@ -15,7 +15,6 @@ sub param_map
 {
 	my ($self, $key) = @_;
 	return {
-		NEC2::Card::program_card_param_maps(),
 		type             =>          'i1',
 		n_radials        =>          'i2',
 		epse             =>          'f1',
@@ -30,7 +29,7 @@ sub param_map
 
 		# not sure about values for nradl=0, someone else please make human-readable values
 		# or the user can just use f1-6 as appropriate
-	}->{$key};
+	};
 }
 
 1;

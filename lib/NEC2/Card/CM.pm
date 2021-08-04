@@ -10,8 +10,7 @@ use overload '""' => \&stringify;
 
 sub param_map
 {
-	# always return 0, there is only one index:
-	return 0;
+	return { comment => 0 };
 }
 
 
