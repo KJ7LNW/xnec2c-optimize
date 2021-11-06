@@ -7,7 +7,7 @@ use Exporter;
 
 use Carp;
 
-$SIG{__DIE__} = sub { Carp::confess(); print Carp::longmess; };
+#$SIG{__DIE__} = sub { Carp::confess(); print Carp::longmess; };
 
 use NEC2::Card::CM;
 use NEC2::Card::EN;
@@ -24,10 +24,13 @@ use NEC2::Card::GS;
 use NEC2::Card::GW;
 use NEC2::Card::GX;
 use NEC2::Card::NE;
+use NEC2::Card::NT;
 use NEC2::Card::RP;
 use NEC2::Card::SC;
 use NEC2::Card::SM;
 use NEC2::Card::SP;
+use NEC2::Card::TL;
+use NEC2::Card::ZO;
 
 BEGIN {
 	our @ISA = qw(Exporter);
@@ -36,7 +39,7 @@ BEGIN {
 		qw/GA GE GF GH GM GR GS GW GC GX SP SM/,
 
 		# Program card functions
-		qw/CP EK EN EX FR GD GN KH LD NE NH NT NX PQ PT RP TL WG XQ/
+		qw/CP EK EN EX FR GD GN KH LD NE NH NT NX PQ PT RP TL WG XQ ZO Z0/
 	);
 }
 
@@ -167,5 +170,9 @@ sub RP { return NEC2::Card::RP->new(@_) }  # Radiation Pattern
 sub TL { return NEC2::Card::TL->new(@_) }  # Transmission Line 
 sub WG { return NEC2::Card::WG->new(@_) }  # Write NGF File
 sub XQ { return NEC2::Card::XQ->new(@_) }  # Execute
+
+# xnec2c extensions
+sub ZO { return NEC2::Card::ZO->new(@_) }  # Charectaristic Impedance
+sub Z0 { return NEC2::Card::ZO->new(@_) }  # Charectaristic Impedance (Z-zero alias)
 
 1;

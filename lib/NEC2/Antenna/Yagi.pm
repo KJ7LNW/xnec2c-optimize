@@ -27,7 +27,8 @@ sub new
 	{
 		$self->{$k} //= $defaults{$k};
 	}
-
+use Data::Dumper;
+print Dumper $self;
 	die "plane must be xy, xz, or yz: $self->{plane}" if ($self->{plane} !~ /^xy|xz|yz$/);
 	die "wire_segments must be odd: $self->{wire_segments}" if ($self->{wire_segments} % 2 == 0);
 

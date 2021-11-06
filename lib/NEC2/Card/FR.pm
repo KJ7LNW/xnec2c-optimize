@@ -42,6 +42,9 @@ sub set_special
 	{
 		# If they specify mhz_inc, then mhz_max is (probably) no longer valid
 		delete $self->{mhz_max};
+
+		# Still set the card var for mhz_inc:
+		$self->set_card_var($var, $val);
 	}
 	elsif ($var eq 'mhz_min' || $var eq 'n_freq')
 	{
@@ -75,6 +78,14 @@ sub _FR_update_mhz_min_max
 
 		# set mhz_inc accordingly:
 		$self->set_card_var('mhz_inc', ($mhz_max - $mhz_min) / ($n_freq-1))
+	}
+
+	my $mhz_inc = $self->get('mhz_inc');
+
+	if ($n_freq > 1 && (!defined($mhz_inc) || $mhz_inc <= 0))
+	{
+		$mhz_inc //= '(undef)';
+		die "FR: n_freq > 1, but mhz_inc is invalid: $mhz_inc";
 	}
 }
 

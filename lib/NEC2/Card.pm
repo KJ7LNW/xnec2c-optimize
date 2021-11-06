@@ -6,7 +6,7 @@ use warnings;
 use overload '""' => \&stringify;
 
 use constant geo_card_names => (qw/GA GE GF GH GM GR GS GW GC GX SP SM/);
-use constant program_card_names => (qw/CP EK EN EX FR GD GN KH LD NE NH NT NX PQ PT RP TL WG XQ/);
+use constant program_card_names => (qw/CP EK EN EX FR GD GN KH LD NE NH NT NX PQ PT RP TL WG XQ ZO/);
 
 sub stringify
 {
