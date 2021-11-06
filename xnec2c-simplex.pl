@@ -6,6 +6,7 @@ use warnings;
 use lib 'lib';
 
 use NEC2;
+use NEC2::Antenna::Yagi;
 
 use PDL;
 use PDL::IO::CSV qw(rcsv1D);
@@ -44,9 +45,9 @@ my $vec_initial = build_simplex_vars($config->{geometry});
 print "===== Initial Condition ==== \n";
 
 
-my @yagi = yagi(get_simplex_vars($vec_initial));
-NEC2::save("$filename_nec", @yagi);
-print @yagi;
+my $yagi = yagi(get_simplex_vars($vec_initial));
+$yagi->save("$filename_nec");
+print $yagi;
 
 if ( -e "$filename_nec_csv" ) {
 	print "\n=== Goal Status ===\n";
@@ -112,6 +113,17 @@ sub goal_eval
 		$idx_min = $i if ($mhz >= $goal->{mhz_min} && !$idx_min);
 		$idx_max = $i if ($mhz <= $goal->{mhz_max});
 	}
+
+	if (!defined($idx_min))
+	{
+		die "can't find index for frequency in CSV at $goal->{mhz_min} MHz";
+	}
+
+	if (!defined($idx_max))
+	{
+		die "can't find index for frequency in CSV at $goal->{mhz_max} MHz";
+	}
+
 
 	# $p contains the goal parameters in the frequency min/max that we are testing:
 	my $p = $csv->{$goal->{field}};
@@ -198,62 +210,34 @@ sub yagi
 
 	print "yagi: lengths=[" . join(', ', @$lengths) . "]\n";
 	print "yagi: spaces=[" . join(', ', @$spaces) . "]\n";
-
-	my $n_segments = $vars{wire_segments}->[0] ; # must be odd!
+use Data::Dumper;
+print Dumper \%vars;
+	my $n_segments = $vars{wire_segments} ; # must be odd!
 	my $ex_seg = int($n_segments / 2) + 1;
 
-	#print "lengths: $lengths\n";
-	#print "spaces: $spaces\n";
-	my @ret = (
-		NEC2::CM->new(comment => 'A yagi antenna'),
-		NEC2::CE->new() 
-		);
+	my $nec = NEC2->new(comment => 'A yagi antenna');
 
+	my $yagi = NEC2::Antenna::Yagi->new(%vars);
 
-	my $zoff = 0;
-	for (my $i = 0 ; $i < nelem($lengths) ; $i++) {
-		my $l = $lengths->[$i];
-		my $s = $spaces->[$i];
-		
-		# spaces are distances between so accumulate the Z offset
-		$zoff += $s;
-		
-		# left and right of zero
-		$l /= 2; 
-		push(
-			@ret,
-			NEC2::GW->new(
-				tag => $i+1,
-				ns  => $n_segments,
-				x   => $l, x2  => -$l,
-				z   => $zoff, z2  => $zoff, 
-				rad => $vars{wire_rad}->[0]
-
-			)
-		);
-
-	}
-
-	# End of geometry and program parameters:
-	push @ret, 
+	$nec->add($yagi);
+	$nec->add(
 		# Free Space:
-		NEC2::GE->new(ground => 0),
-		NEC2::RP360->new(),
+		GE(ground => 0),
+		RP(ground => 0),
 
 		# With ground:
-		#NEC2::GE->new(ground => 1),
-		#NEC2::RP180->new(),
-		#NEC2::GN->new(type => 1),
+		#GE->new(ground => 1),
+		#RP180,
+		#GN->new(type => 1),
 
-		NEC2::EX->new(ex_tag => 2, ex_segment => $ex_seg),
+		EX(ex_tag => 2, ex_segment => $ex_seg),
 
-		NEC2::NH->new(),
-		NEC2::NE->new(),
-		NEC2::FR->new(mhz => $FR->{freq_min}, mhz_inc => $FR->{freq_step}, n_freq => $FR->{n_freq}),
-		NEC2::EN->new()
-		;
+		NH,
+		NE,
+		FR(mhz_min => $FR->{freq_min}, mhz_max => $FR->{freq_max}, n_freq => $FR->{n_freq})
+	);
 
-	return @ret;
+	return $nec;
 }
 
 
@@ -262,13 +246,18 @@ sub f
 	my ($vec) = @_;
 
 	my $inotify = Linux::Inotify2->new;
+	if (! -e "$filename_nec_csv" )
+	{
+		open(my $csv, ">", "$filename_nec_csv");
+		close($csv);
+	}
 	$inotify->watch("$filename_nec_csv", IN_CLOSE_WRITE)
 		or die "inotify: $!: $filename_nec_csv";
 
 	# save and wait for the CSV to be written:
 	
 
-	NEC2::save("$filename_nec", yagi(get_simplex_vars($vec)));
+	yagi(get_simplex_vars($vec))->save("$filename_nec");
 	$inotify->read;
 
 	my $csv = load_csv("$filename_nec_csv");
@@ -421,6 +410,10 @@ sub get_simplex_vars
 	foreach my $var (keys %$vars)
 	{
 		$h{$var} = get_simplex_var($pdl, $var);
+		if (ref($h{$var}) eq 'ARRAY' && scalar(@{ $h{$var} }) == 1)
+		{
+			$h{$var} = $h{$var}->[0]
+		}
 	}
 
 	return %h;
