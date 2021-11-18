@@ -10,7 +10,7 @@ sub defaults
 {
 	# note that NEC2 does not define mhz_max, it is calculated in the 
 	# overloaded set_special() function below.
-	return (type => 0, n_freq => 10, mhz_min => 144, mhz_max => 148);
+	return (type => 0, n_freq => 10);
 }
 
 # human-readable terms, some have multiple aliases for the same thing:
@@ -68,11 +68,7 @@ sub _FR_update_mhz_min_max
 	my $mhz_min = $self->get('mhz_min');
 	my $mhz_max = $self->{mhz_max};
 
-	if ($n_freq <= 1)
-	{
-		$self->set_card_var('mhz_inc', 0);
-	}
-	elsif (defined($self->{mhz_max}))
+	if (defined($self->{mhz_max}))
 	{
 		die "FR: mhz_min !< mhz_max: $mhz_min !< $mhz_max" if ($mhz_min >= $mhz_max);
 
