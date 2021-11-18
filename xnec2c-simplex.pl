@@ -11,6 +11,7 @@ use NEC2::Antenna::Yagi;
 use PDL;
 use PDL::IO::CSV qw(rcsv1D);
 use PDL::Opt::Simplex;
+use PDL::Opt::Simplex::Simple;
 
 use Linux::Inotify2;
 use Data::Dumper;
@@ -39,20 +40,31 @@ my $goals = $config->{goals};
 
 $FR->{freq_step} = ($FR->{freq_max} - $FR->{freq_min}) / ($FR->{n_freq} - 1);
 
-my $vec_initial = build_simplex_vars($config->{geometry});
+
+
+my $simpl = PDL::Opt::Simplex::Simple->new(
+	vars => $config->{geometry},
+	f => \&f,
+	log => sub { print "LOG: ". Dumper( \@_) },
+	ssize => $config->{simplex}{ssize}, 
+	max_iter => $config->{simplex}{max_iter},
+	tolerance => $config->{simplex}{tolerance});
+
 
 
 print "===== Initial Condition ==== \n";
 
+# Can this use f()?
+# Can goal_eval's  printing be done in log()?
 
-my $yagi = yagi(get_simplex_vars($vec_initial));
+my $yagi = yagi($simpl->get_vars_initial);
 $yagi->save("$filename_nec");
 print $yagi;
 
 if ( -e "$filename_nec_csv" ) {
 	print "\n=== Goal Status ===\n";
 	my $csv = load_csv("$filename_nec_csv");
-	goal_eval_all($config->{goals}, $vec_initial, $csv);
+	goal_eval_all($config->{goals}, $simpl->get_vars_initial, $csv);
 }
 
 my $ncpus = `grep -c processor /proc/cpuinfo`; chomp $ncpus;
@@ -65,16 +77,15 @@ print "Open \`xnec2c -j $ncpus $filename_nec\` and select File->Optimizer Output
 
 print "\n===== Starting Optimization ==== \n";
 
-my ( $vec_optimal, $opt_ssize, $optval ) = simplex($vec_initial, $config->{simplex}{ssize}, $config->{simplex}{tolerance}, $config->{simplex}{max_iter}, \&f, \&log);
-
+my $result = $simpl->optimize();
 
 print "\n===== Done! ==== \n";
 
-# One more with the optimal value:
-f($vec_optimal);
+print "Result: " . Dumper($result);
 
-my $x = $vec_optimal->slice('(0)');
-print "opt_ssize=$opt_ssize  opt=$x -> minima=$optval\n";
+# TODO: Print goal and output status (log details):
+
+f($result);
 
 print "\n===== $filename_nec ==== \n";
 system("cat $filename_nec");
@@ -88,7 +99,7 @@ my $log_count = 0;
 
 sub goal_eval
 {
-	my ($vec, $csv, $goal) = @_;
+	my ($vars, $csv, $goal) = @_;
 
 	my $weight = $goal->{weight} || 1;
 	my $type = $goal->{type} // 'sum';
@@ -97,7 +108,7 @@ sub goal_eval
 	# function on the variables and pass the $csv.
 	if (!defined($goal->{field}))
 	{
-		my $v = $goal->{result}->($vec, $csv); 
+		my $v = $goal->{result}->($vars, $csv); 
 		print "Goal $goal->{name} is $v\n";
 		return $v * $weight;
 	}
@@ -188,14 +199,14 @@ sub goal_eval
 
 sub goal_eval_all
 {
-	my ($goals, $vec, $csv) = @_;
+	my ($goals, $vars, $csv) = @_;
 
 	my $ret = 0;
 	foreach my $g (@$goals) {
 		# Default to enabled if undefined.
 		$g->{enabled} //= 1;
 		next if (!$g->{enabled});
-		$ret += goal_eval($vec, $csv, $g);
+		$ret += goal_eval($vars, $csv, $g);
 	}
 
 	return $ret;
@@ -203,21 +214,19 @@ sub goal_eval_all
 
 sub yagi
 {
-	my (%vars) = @_;
+	my ($vars) = @_;
 
-	my $lengths = $vars{lengths};
-	my $spaces = $vars{spaces};
+	my $lengths = $vars->{lengths};
+	my $spaces = $vars->{spaces};
 
 	print "yagi: lengths=[" . join(', ', @$lengths) . "]\n";
 	print "yagi: spaces=[" . join(', ', @$spaces) . "]\n";
-use Data::Dumper;
-print Dumper \%vars;
-	my $n_segments = $vars{wire_segments} ; # must be odd!
+	my $n_segments = $vars->{wire_segments} ; # must be odd!
 	my $ex_seg = int($n_segments / 2) + 1;
 
 	my $nec = NEC2->new(comment => 'A yagi antenna');
 
-	my $yagi = NEC2::Antenna::Yagi->new(%vars);
+	my $yagi = NEC2::Antenna::Yagi->new(%$vars);
 
 	$nec->add($yagi);
 	$nec->add(
@@ -230,8 +239,6 @@ print Dumper \%vars;
 		#RP180,
 		#GN->new(type => 1),
 
-		EX(ex_tag => 2, ex_segment => $ex_seg),
-
 		NH,
 		NE,
 		FR(mhz_min => $FR->{freq_min}, mhz_max => $FR->{freq_max}, n_freq => $FR->{n_freq})
@@ -243,7 +250,7 @@ print Dumper \%vars;
 
 sub f
 {
-	my ($vec) = @_;
+	my $vars = shift;
 
 	my $inotify = Linux::Inotify2->new;
 	if (! -e "$filename_nec_csv" )
@@ -254,21 +261,13 @@ sub f
 	$inotify->watch("$filename_nec_csv", IN_CLOSE_WRITE)
 		or die "inotify: $!: $filename_nec_csv";
 
-	# save and wait for the CSV to be written:
-	
-
-	yagi(get_simplex_vars($vec))->save("$filename_nec");
+	# save and wait for the CSV to be written by xnec2c:
+	yagi($vars)->save("$filename_nec");
 	$inotify->read;
 
 	my $csv = load_csv("$filename_nec_csv");
 
-	# Whatever vector format $vec->slice("(0)") is, $ret must be also.
-	# So slice it, multiply times zero, and then add whatever you need:
-	my $ret = $vec->slice("(0)");
-	$ret *= 0;
-	$ret += goal_eval_all($config->{goals}, $vec, $csv);
-
-	return $ret;
+	return goal_eval_all($config->{goals}, $vars, $csv);
 }
 
 sub log
@@ -315,106 +314,3 @@ sub load_csv
 	return \%h;
 }
 
-sub build_simplex_vars 
-{
-	my ($vars) = @_;
-
-	# first element is for simplex's return-value use, set it to 0.	
-	my @pdl_vars = (0);
-	foreach my $var_name (sort keys(%$vars))
-	{
-		my $var = $vars->{$var_name};
-
-		my $n = scalar(@{ $var->{values} });
-
-		# If enabled is missing or a non-scalar (ie =1 or =0) then form it properly
-		# as either all 1's or all 0's:
-		if (!defined($var->{enabled}) || (!ref($var->{enabled}) && $var->{enabled}))
-		{
-			$var->{enabled} = [ map { 1 } @{ $var->{values} } ] 
-		}
-		elsif (defined($var->{enabled}) && !ref($var->{enabled}) && !$var->{enabled})
-		{
-			$var->{enabled} = [ map { 0 } @{ $var->{values} } ] 
-		}
-
-		if (defined($var->{enabled}) && $n != scalar(@{ $var->{enabled} }))
-		{
-			die "variable $var must have the same length array for 'values' as for 'enabled'"
-		}
-
-
-		for (my $i = 0; $i < $n; $i++)
-		{
-			# var is enabled for simplex if enabled[$i] == 1
-			if ($var->{enabled}->[$i])
-			{
-				push(@pdl_vars, $var->{values}->[$i]);
-			}
-		}
-	}
-
-	return pdl \@pdl_vars;
-}
-
-sub get_simplex_var
-{
-	my ($pdl, $var_name) = @_;
-
-	my $vars = $config->{geometry};
-
-	my @ret;
-	
-	my $var = $vars->{$var_name};
-
-	my $n = scalar(@{ $var->{values} });
-	my $pdl_idx = 1; # skip first element
-
-	# skip ahead to where the pdl_idx that we need is located:
-	foreach my $vn (sort keys(%$vars))
-	{
-		my $var = $vars->{$vn};
-
-		# done if we find it:
-		last if $vn eq $var_name;
-
-		$pdl_idx++ foreach (grep { $_ } @{ $var->{enabled} });
-	}
-	
-	for (my $i = 0; $i < $n; $i++)
-	{
-		# use the pdl index if it is enabled for optimization
-		# otherwise use the original index in $var.
-		if ($var->{enabled}->[$i])
-		{
-			push(@ret, unpdl($pdl->slice("($pdl_idx)", 0))->[0]);
-			$pdl_idx++;
-		}
-		else
-		{
-			push(@ret, $var->{values}->[$i]);
-		}
-	}
-
-	return \@ret;
-}
-
-sub get_simplex_vars
-{
-	my ($pdl) = @_;	
-	
-	my $vars = $config->{geometry};
-
-	my %h;
-
-	foreach my $var (keys %$vars)
-	{
-		$h{$var} = get_simplex_var($pdl, $var);
-		if (ref($h{$var}) eq 'ARRAY' && scalar(@{ $h{$var} }) == 1)
-		{
-			$h{$var} = $h{$var}->[0]
-		}
-	}
-
-	return %h;
-}
