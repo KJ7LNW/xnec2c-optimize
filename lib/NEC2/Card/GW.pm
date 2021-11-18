@@ -45,6 +45,7 @@ sub param_map
 		z2   =>          'zw2',
 
 		wire_rad =>      'f7',
+		rad =>           'f7',
 	};
 }
 
