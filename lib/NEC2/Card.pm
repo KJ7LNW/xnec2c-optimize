@@ -46,16 +46,25 @@ sub new
 	# set once.  This is important for things like FR's mhz_min and
 	# mhz_max that will break if they are done out of order, especially
 	# if the defaults do not maintain a min<max relationship with the
-	# ones provided by the user
-	my %defaults = $class->defaults;
+	# ones provided by the user:
+	
+	my @defaults = $class->defaults;
+	my %ignore;
 	for (my $i = 0; $i < @args; $i += 2)
 	{
-		delete $defaults{$args[$i]};
+		$ignore{$args[$i]} = 1;
 	}
+
+	my @use_defaults;
+	for (my $i = 0; $i < @defaults; $i += 2)
+	{
+		push (@use_defaults, $defaults[$i], $defaults[$i+1]) if !$ignore{$defaults[$i]};
+	}
+
 
 	# Set passed values.
 	# Note that the order is important here, so we pass a list not a hash:
-	$self->set(%defaults, @args);
+	$self->set(@use_defaults, @args);
 
 	return $self;
 }
