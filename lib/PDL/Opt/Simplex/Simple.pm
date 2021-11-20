@@ -302,21 +302,38 @@ PDL::Opt::Simplex::Simple - A simplex optimizer for the rest of us
 =head1 DESCRIPTION
 
 This class uses L<PDL::Opt::Simplex> to find the values for C<vars>
-that cause the C<f> sub to return the minimum value.  The difference
+that cause the C<f> coderef to return the minimum value.  The difference
 between L<PDL::Opt::Simplex> and L<PDL::Opt::Simplex::Simple> is that
 L<PDL::Opt::Simplex> expects all data to be in PDL format and it is
 more complicated to manage, whereas, L<PDL::Opt::Simplex:Simple> uses
 all scalar Perl values. (PDL values are not supported, or at least,
 have not been tested.)
 
+With the original L<PDL::Opt::Simplex> module, a single vector array
+had to be sliced into the different variables represented by the array.
+This was non-intuitive and error-prone.  This class attempts to improve
+on that by defining data structure of variables, values, and whether or
+not a value is enabled for optimization.
+
+This means you can selectively disable a particular value and it will be
+excluded from optimization but still included when passed to the user's
+callback function C<f>.  Internal functions in this class compile the state
+of this variable structure into the vector array needed by simplex,
+and then extract values into a usable format to be passed to the user's
+callback function.
+
+
 =head1 FUNCTIONS
 
-=item * new()
-=item * optimize()
+=item * new(%args) - Instantiate class
+
+=item * optimize() - Run the optimization
 
 =head1 ARGUMENTS
 
-=item * C<vars> - Hash of variables to optimize: the answer to your question.
+=head2 C<vars> - Hash of variables to optimize: the answer to your question.
+
+=head3 Simple C<vars> Format 
 
 Thes are the variables being optimized to find a minimized result.
 The simplex() function returns minimized set of C<vars>. In its Simple
@@ -337,13 +354,41 @@ or as vectors of (possibly) different lengths:
 		v => [ 7, 8 ], ...
 	}
 
-Expanded C<vars> format: You may find during optimization that it would
+=head3 Expanded C<vars> Format 
+
+You may find during optimization that it would
 be convenient to disable certain elements of the vector being optimized
 if, for example, you know that one value is already optimal but that it
 needs to be available to the f() callback.  The expanded format shows
 that the 4th element is excluded from optimization by setting enabled=0
 for that index.
 
+Expanded format:  
+
+	vars => {
+		varname => { "values" => [...], "enabled" => [...] }, ...
+	}
+
+=item C<varname>: the name of the variable being used.
+
+=item C<values>:  an arrayref of values to be optimized
+
+=item C<enabled>: 1 or 0: enabled a specific index to be optimized.
+
+=head4 Notes:
+
+=item * If 'enabled' is undefined then all values are enabled.
+
+=item * If 'enabled' is not an array, it can be a scalar 0 or 1 to
+indicate that all values are enabled/disabled.  In this case your original
+structure will be replaced with an arrayref of all 0/1 values.
+
+=item * Enabling or disabling a variable may be useful in testing
+certain geometry charactaristics during optimization.
+
+Internally, all values are vectors, even if the vectors are of length 1,
+but you can pass them as singletons like C<spaces> is shown below if
+you need to disable a single value:
 
 	# Element lengths                                                
 	vars => {
@@ -358,11 +403,8 @@ for that index.
 		...
 	}
 
-Internally, all values are vectors, even if the vectors are of length 1,
-but you can pass them as singletons like C<spaces> is shown above if
-you need to disable a single value.
 
-=item * C<f> - Callback function to operate upon C<vars>
+=head2 * C<f> - Callback function to operate upon C<vars>
 
 The C<f> argument is a coderef that is called by the optimizer.  It is passed a hashref of C<vars> in 
 the Simple Format and must return a scalar result:
@@ -375,7 +417,7 @@ Note that a single-length vector will be passed as a scalar:
 
 The Simplex algorithm will work to minimize the return value of your C<f> coderef.
 
-=item * C<log> - Callback function log status for each iteration.
+=head2 * C<log> - Callback function log status for each iteration.
 
 	log => sub { 
 			my ($vars, $state) = @_;
@@ -385,9 +427,17 @@ The Simplex algorithm will work to minimize the return value of your C<f> codere
 
 The log() function is passed the current state of C<vars> in the
 same format as the C<f> callback.  A second C<$state> argument is passed
-with information about the The return value is ignored.
+with information about the The return value is ignored.  The following 
+values are available in the C<$state> hashref:
 
-=item * C<ssize> - Initial simplex size, see L<PDL::Opt::Simplex>
+	{
+		'ssize' => '704.187123721893',  # current ssize during iteration
+		'minima' => '53.2690700664067', # current minima returned by f()
+		'elapsed => '3.12'              # elapsed time in seconds since last log() call.
+	}
+
+
+=head2 * C<ssize> - Initial simplex size, see L<PDL::Opt::Simplex>
 
 Think of this as "step size" but not really, a bigger value makes larger
 jumps but the value doesn't translate to a unit.  (It actually stands
@@ -405,13 +455,13 @@ higher frequencies need a lower value.
 
 Default: 0.1
 
-=item * C<max_iter> - Maximim number of Simplex iterations
+=head2 * C<max_iter> - Maximim number of Simplex iterations
 
 Note that one Simplex iteration may call C<f> multiple times.
 
 Default: 1000
 
-=item * C<tolerance> - Conversion tolerance for Simplex
+=head2 * C<tolerance> - Conversion tolerance for Simplex
 
 The default is 1e-6.  It tells Simplex to stop before C<max_iter> if 
 very little change is being made between iterations.
