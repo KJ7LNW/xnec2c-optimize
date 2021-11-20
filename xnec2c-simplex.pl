@@ -32,47 +32,29 @@ $filename_nec_csv = "$filename_nec.csv";
 
 my $config = do($filename_config);
 die $@ if $@;
-#print Dumper $config;
-#exit;
-
-my $FR = $config->{FR};
-my $goals = $config->{goals};
-
-$FR->{freq_step} = ($FR->{freq_max} - $FR->{freq_min}) / ($FR->{n_freq} - 1);
-
-
 
 my $simpl = PDL::Opt::Simplex::Simple->new(
-	vars => $config->{geometry},
+	vars => $config->{vars},
 	f => \&f,
-	log => sub { print "LOG: ". Dumper( \@_) },
-	ssize => $config->{simplex}{ssize}, 
-	max_iter => $config->{simplex}{max_iter},
-	tolerance => $config->{simplex}{tolerance});
-
+	log => \&log,
+	%{ $config->{simplex} });
 
 
 print "===== Initial Condition ==== \n";
 
-# Can this use f()?
-# Can goal_eval's  printing be done in log()?
+print Dumper($simpl->get_vars_initial) . "\n";
 
-my $yagi = yagi($simpl->get_vars_initial);
-$yagi->save("$filename_nec");
-print $yagi;
 
-if ( -e "$filename_nec_csv" ) {
-	print "\n=== Goal Status ===\n";
-	my $csv = load_csv("$filename_nec_csv");
-	goal_eval_all($config->{goals}, $simpl->get_vars_initial, $csv);
-}
+print "===== Writing NEC2 output to $filename_nec =====\n\n";
 
 my $ncpus = `grep -c processor /proc/cpuinfo`; chomp $ncpus;
-
-print "\n===== Ready ==== \n";
-print "Writing NEC2 output to $filename_nec\n";
 print "Open \`xnec2c -j $ncpus $filename_nec\` and select File->Optimizer Output. Then you may press enter to begin.\n";
 <STDIN>;
+
+unlink($filename_nec_csv);
+f($simpl->get_vars_initial);
+
+print $config->{nec2}->($simpl->get_vars_initial);
 
 
 print "\n===== Starting Optimization ==== \n";
@@ -83,8 +65,6 @@ print "\n===== Done! ==== \n";
 
 print "Result: " . Dumper($result);
 
-# TODO: Print goal and output status (log details):
-
 f($result);
 
 print "\n===== $filename_nec ==== \n";
@@ -92,7 +72,8 @@ system("cat $filename_nec");
 
 exit 0;
 
-# functions below here
+#####################################################################
+#                                                           Functions
 
 # Globals for the functions:
 my $log_count = 0;
@@ -193,7 +174,7 @@ sub goal_eval
 	$ret *= $weight;
 
 	my $name = $goal->{name} // '';
-	print "Goal $name ($goal->{field}) is $ret [$min,$max]. Values $goal->{mhz_min} to $goal->{mhz_max} MHz:\n\t$p\n";
+	#print "Goal $name ($goal->{field}) is $ret [$min,$max]. Values $goal->{mhz_min} to $goal->{mhz_max} MHz:\n\t$p\n";
 	return $ret;
 }
 
@@ -212,42 +193,6 @@ sub goal_eval_all
 	return $ret;
 }
 
-sub yagi
-{
-	my ($vars) = @_;
-
-	my $lengths = $vars->{lengths};
-	my $spaces = $vars->{spaces};
-
-	print "yagi: lengths=[" . join(', ', @$lengths) . "]\n";
-	print "yagi: spaces=[" . join(', ', @$spaces) . "]\n";
-	my $n_segments = $vars->{wire_segments} ; # must be odd!
-	my $ex_seg = int($n_segments / 2) + 1;
-
-	my $nec = NEC2->new(comment => 'A yagi antenna');
-
-	my $yagi = NEC2::Antenna::Yagi->new(%$vars);
-
-	$nec->add($yagi);
-	$nec->add(
-		# Free Space:
-		GE(ground => 0),
-		RP(ground => 0),
-
-		# With ground:
-		#GE->new(ground => 1),
-		#RP180,
-		#GN->new(type => 1),
-
-		NH,
-		NE,
-		FR(mhz_min => $FR->{freq_min}, mhz_max => $FR->{freq_max}, n_freq => $FR->{n_freq})
-	);
-
-	return $nec;
-}
-
-
 sub f
 {
 	my $vars = shift;
@@ -262,7 +207,7 @@ sub f
 		or die "inotify: $!: $filename_nec_csv";
 
 	# save and wait for the CSV to be written by xnec2c:
-	yagi($vars)->save("$filename_nec");
+	$config->{nec2}->($vars)->save("$filename_nec");
 	$inotify->read;
 
 	my $csv = load_csv("$filename_nec_csv");
@@ -272,27 +217,19 @@ sub f
 
 sub log
 {
-	my ($vec, $vals, $ssize) = @_;
-	# $vec is the array of values being optimized
-	# $vals is f($vec)
-	# $ssize is the simplex size, or roughly, how close to being converged.
+	my ($vars, $status) = @_;
 
-	my $minima = $vec->slice("(0)", 0);
-	
-	my $lengths = get_simplex_var($vec, 'lengths');
-	my $spaces = get_simplex_var($vec, 'spaces');
-
-	#print "f: vec=$vec\n";
-	print "f: lengths=[" . join(', ', @$lengths) . "]\n";
-	print "f: spaces=[" . join(', ', @$spaces) . "]\n";
-
-	# each vector element passed to log() has a min and max value.
-	# ie: x=[6 0] -> vals=[76 4]
-	# so, from above: f(6) == 76 and f(0) == 4
-
+	my $minima = $status->{minima};
+	my $ssize = $status->{ssize};
 
 	$log_count++;
-	print "\n\nLOG $log_count: $ssize > $config->{simplex}{tolerance}, minima = $minima.\n";
+
+	printf "\n\nLOG %d/%d [%.2f s]: %.6f > %g, goal minima = %.6f\n",
+		$log_count, $simpl->{max_iter},
+		$status->{elapsed},
+		$ssize, $simpl->{tolerance},
+		$minima;
+	print Dumper($vars);
 }
 
 sub load_csv
@@ -313,4 +250,6 @@ sub load_csv
 
 	return \%h;
 }
+
+
 

@@ -3,6 +3,8 @@ package PDL::Opt::Simplex::Simple;
 use strict;
 use warnings;
 
+use Time::HiRes qw/time/;
+
 use PDL;
 use PDL::Opt::Simplex;
 
@@ -13,7 +15,7 @@ sub new
 	my $self = bless(\%args, $class);
 
 	$self->{tolerance}  //=  1e-6;
-	$self->{max_iter}   //=  100;
+	$self->{max_iter}   //=  1000;
 	$self->{ssize}      //=  0.1;
 
 	# vars, ssize, tolerance, max_iter, f, log
@@ -58,9 +60,17 @@ sub optimize
 
 			return unless (defined($self->{log}));
 
+			my $elapsed;
+			if ($self->{prev_time})
+			{
+				$elapsed = time() - $self->{prev_time};
+			}
+			$self->{prev_time} = time();
+
+
 			my $minima = $vec->slice("(0)", 0)->sclr;
 			$self->{log}->($self->_get_simplex_vars($vec), 
-				{ ssize => $ssize, minima => $minima });
+				{ ssize => $ssize, minima => $minima, elapsed => $elapsed });
 		}
 	);
 
@@ -379,10 +389,19 @@ with information about the The return value is ignored.
 
 =item * C<ssize> - Initial simplex size, see L<PDL::Opt::Simplex>
 
+Think of this as "step size" but not really, a bigger value makes larger
+jumps but the value doesn't translate to a unit.  (It actually stands
+for simplex size, and it initializes the size of the simplex tetrahedron.)
+
 You will need to scale the C<ssize> argument depending on your search
 space.  Smaller C<ssize> values will search a smaller space of possible
 values provided in C<vars>.  This is problem-space dependent and may
 require some trial and error to tune it where you need it to be.
+
+Example for optimizing geometry in an EM simulation: Because it is
+proportional to wavelength, lower frequencies need a larger value and
+higher frequencies need a lower value.
+
 
 Default: 0.1
 
@@ -390,7 +409,7 @@ Default: 0.1
 
 Note that one Simplex iteration may call C<f> multiple times.
 
-Default: 100
+Default: 1000
 
 =item * C<tolerance> - Conversion tolerance for Simplex
 
