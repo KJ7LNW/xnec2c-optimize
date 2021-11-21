@@ -39,8 +39,7 @@ $xnec2c->print_vars_initial();
 print "===== Writing NEC2 output to $filename_nec =====\n\n";
 
 my $ncpus = `grep -c processor /proc/cpuinfo`; chomp $ncpus;
-print "Open \`xnec2c -j $ncpus $filename_nec\` and select File->Optimizer Output. Then you may press enter to begin.\n";
-<STDIN>;
+print "Open \`xnec2c -j $ncpus $filename_nec\` and select File->Optimizer Output. Optimization will then begin.\n";
 
 $xnec2c->save_nec_initial();
 
@@ -50,7 +49,6 @@ print $xnec2c->print_nec2_initial();
 print "\n===== Starting Optimization ==== \n";
 
 
-sleep 1; #xnec2c deadlocks without this!
 $xnec2c->optimize();
 
 print "\n===== Done! ==== \n";

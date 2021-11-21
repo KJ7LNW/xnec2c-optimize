@@ -40,7 +40,7 @@ sub new
 
 	$self->{simplex} = PDL::Opt::Simplex::Simple->new(
 		vars => $self->{vars},
-		f    =>  sub  {  print Dumper \@_; $self->_xnec2c_optimize_callback(@_)  },
+		f    =>  sub  {  $self->_xnec2c_optimize_callback(@_)  },
 		log  =>  sub  {  $self->_log(@_)                       },
 		%{ $self->{simplex} });
 	
@@ -92,23 +92,14 @@ sub save_nec_initial
 {
 	my $self = shift;
 
-#$self->_xnec2c_optimize_callback($self->{simplex}->get_vars_initial);
-#return;
-
-	my $nec2 = $self->{nec2}->($self->{simplex}->get_vars_initial);
-	print("saving $self->{filename_nec}: $nec2\n");
-	$nec2->save($self->{filename_nec});
+	$self->_xnec2c_optimize_callback($self->{simplex}->get_vars_initial);
 }
 
 sub save_nec_final
 {
 	my $self = shift;
 
-#$self->_xnec2c_optimize_callback($self->{result});
-#return;
-
-	my $nec2 = $self->{nec2}->($self->{result});
-	$nec2->save($self->{filename_nec});
+	$self->_xnec2c_optimize_callback($self->{result});
 }
 
 sub _xnec2c_optimize_callback
@@ -117,7 +108,6 @@ sub _xnec2c_optimize_callback
 
 	my $filename = $self->{filename_nec_csv};
 
-print "waiting for $filename\n";
 	my $inotify = Linux::Inotify2->new;
 	if (! -e "$filename" )
 	{
@@ -130,10 +120,7 @@ print "waiting for $filename\n";
 
 	# save and wait for the CSV to be written by xnec2c:
 	$self->{nec2}->($vars)->save($self->{filename_nec});
-print "saved $self->{filename_nec}\n";
 	$inotify->read;
-
-print "done waiting for $filename\n";
 
 	my $csv = _load_csv("$filename");
 
@@ -149,12 +136,14 @@ sub _log
 
 	$self->{log_count}++;
 
+	print Dumper($vars);
+	$status->{elapsed} //= -1;
+
 	printf "\n\nLOG %d/%d [%.2f s]: %.6f > %g, goal minima = %.6f\n",
 		$self->{log_count}, $self->{simplex}->{max_iter},
 		$status->{elapsed},
 		$ssize, $self->{simplex}->{tolerance},
 		$minima;
-	print Dumper($vars);
 }
 
 sub _load_csv
@@ -176,8 +165,6 @@ sub _load_csv
 		}
 	}
 
-
-print Dumper \%h;
 	return \%h;
 }
 
