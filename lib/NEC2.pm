@@ -79,7 +79,41 @@ sub geo_cards
 sub program_cards
 {
 	my $self = shift;
-	return grep { $_->card_name ne 'EN' } @{ $self->{program_cards} };
+	return @{ $self->{program_cards} };
+}
+
+sub card_filter
+{
+	my ($self, $card, @cards) = @_;
+
+	$card = uc($card);
+
+	my @filter;
+	if ($card =~ s/^!//) {
+		@filter = grep { $_->card_name ne $card } @cards;
+	}
+	else
+	{
+		@filter = grep { $_->card_name eq $card } @cards;
+	}
+
+	die "filter for $card returned >1 result, but !wantarray" if (@filter > 1 && !wantarray);
+	return @filter if (wantarray);
+	return $filter[0];
+}
+
+sub geo_card_filter
+{
+	my ($self, $card) = @_;
+
+	return $self->card_filter($card, $self->geo_cards());
+}
+
+sub program_card_filter
+{
+	my ($self, $card) = @_;
+
+	return $self->card_filter($card, $self->program_cards());
 }
 
 sub stringify
@@ -93,13 +127,14 @@ sub stringify
 	
 	# always put the GE card at the end of the geometry.  Default to freespace GE if
 	# none was defined:
-	my ($GE) = grep { $_->card_name eq 'GE' } $self->geo_cards();
+	my $GE = $self->card_filter('GE');
 	$GE //= GE();
 
-	my @geo = grep { $_->card_name ne 'GE' } $self->geo_cards();
-
+	# exclude GE, it goes above
+	my @geo = $self->geo_card_filter('!GE');
+	
 	# exclude EN cards because they go at the end:
-	my @program = grep { $_->card_name ne 'EN' } $self->program_cards();
+	my @program = $self->program_card_filter('!EN');
 
 	$ret .= join('', @geo);
 	$ret .= $GE;
@@ -113,6 +148,8 @@ sub stringify
 sub save
 {
 	my ($self, $fn, @structure) = @_;
+
+	$fn or die "invalid filename: $fn";
 
 	open(my $structure, "|column -t > $fn") or die "$!: $fn";
 

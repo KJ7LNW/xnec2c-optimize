@@ -152,7 +152,7 @@ sub set_special
 # Core functions
 # get card (or class) value:
 #
-sub get
+sub get_card_var
 {
 	my ($self, $var) = @_;
 
@@ -171,6 +171,24 @@ sub get
 	{
 		die "Unknown var for class " . ref($self) . ": $var";
 	}
+
+	return $val;
+}
+
+sub get
+{
+	my ($self, $var) = @_;
+
+	our $depth++;
+	die "get: depth is too deep (maybe get_card_var instead of get?): $var" if ($depth > 10);
+
+	my $val = $self->get_special($var);
+	if (!defined($val))
+	{
+		$val = $self->get_card_var($var);
+	}
+
+	$depth--;
 
 	return $val;
 }
