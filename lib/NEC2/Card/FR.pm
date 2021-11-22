@@ -29,6 +29,17 @@ sub param_map
 	};
 }
 
+sub get_special
+{
+	my ($self, $var) = @_;
+
+	if ($var eq 'mhz_max')
+	{
+		return $self->get('mhz_min') + ($self->get('n_freq')-1)*$self->get('mhz_inc');
+	}
+
+	return undef;
+}
 
 sub set_special
 {
@@ -68,12 +79,12 @@ sub _FR_update_mhz_min_max
 	my $mhz_min = $self->get('mhz_min');
 	my $mhz_max = $self->{mhz_max};
 
-	if (defined($self->{mhz_max}))
+	if (defined($self->{mhz_max}) && defined($n_freq) && $n_freq > 1)
 	{
 		die "FR: mhz_min !< mhz_max: $mhz_min !< $mhz_max" if ($mhz_min >= $mhz_max);
 
 		# set mhz_inc accordingly:
-		$self->set_card_var('mhz_inc', ($mhz_max - $mhz_min) / ($n_freq-1))
+		$self->set_card_var('mhz_inc', ($mhz_max - $mhz_min) / ($n_freq-1));
 	}
 
 	my $mhz_inc = $self->get('mhz_inc');
