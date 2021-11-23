@@ -17,6 +17,15 @@ sub new
 	$self->{tolerance}  //=  1e-6;
 	$self->{max_iter}   //=  1000;
 	$self->{ssize}      //=  0.1;
+	
+	if ($self->{srand})
+	{
+		$self->{srand} = srand($self->{srand});
+	}
+	else 
+	{
+		$self->{srand} = srand();
+	}
 
 	# vars, ssize, tolerance, max_iter, f, log
 	return $self;
@@ -70,7 +79,7 @@ sub optimize
 
 			my $minima = $vec->slice("(0)", 0)->sclr;
 			$self->{log}->($self->_get_simplex_vars($vec), 
-				{ ssize => $ssize, minima => $minima, elapsed => $elapsed });
+				{ ssize => $ssize, minima => $minima, elapsed => $elapsed, srand => $self->{srand} });
 		}
 	);
 
@@ -433,7 +442,8 @@ values are available in the C<$state> hashref:
 	{
 		'ssize' => '704.187123721893',  # current ssize during iteration
 		'minima' => '53.2690700664067', # current minima returned by f()
-		'elapsed => '3.12'              # elapsed time in seconds since last log() call.
+		'elapsed' => '3.12',            # elapsed time in seconds since last log() call.
+		'srand' => 55294712             # the random seed for this run
 	}
 
 
@@ -467,6 +477,19 @@ The default is 1e-6.  It tells Simplex to stop before C<max_iter> if
 very little change is being made between iterations.
 
 Default: 1e-6
+
+=head2 * C<srand> - Value to seed srand
+
+Simplex makes use of random perturbation, so setting this value will make
+the simulation deterministic from run to run.
+
+The default when not defined is to call srand() without arguments and use
+a randomly generated seed.  If set, it will call srand($self->{srand})
+to initialize the initial seed.  The result of this seed (whether passed
+or generated) is available in the status structure defined above.
+
+Default: 1e-6
+
 
 =head1 SEE ALSO
 
