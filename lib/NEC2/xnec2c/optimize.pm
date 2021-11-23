@@ -85,7 +85,7 @@ sub print_nec2_initial
 sub print_nec2_final
 {
 	my $self = shift;
-	print $self->{nec2}->($self->{simplex}->get_vars_initial);
+	print $self->{nec2}->($self->{result});
 }
 
 sub save_nec_initial
@@ -137,13 +137,14 @@ sub _log
 
 	$self->{log_count}++;
 
-	print Dumper($vars);
+	print Dumper($vars, $self->{goal_status});
 	$status->{elapsed} //= -1;
 
-	printf "\n\nLOG %d/%d [%.2f s]: %.6f > %g, goal minima = %.6f\n",
+	printf "\n\nLOG %d/%d [%.2f s]: %.6f > %g (srand=%d), goal minima = %.6f\n",
 		$self->{log_count}, $self->{simplex}->{max_iter},
 		$status->{elapsed},
 		$ssize, $self->{simplex}->{tolerance},
+		$self->{simplex}->{'srand'},
 		$minima;
 }
 
@@ -177,22 +178,6 @@ sub _goal_eval_mhz
 
 	my $weight = $goal->{weight} || 1;
 	my $type = $goal->{type} // 'sum';
-
-	# Shrink the min/max values in case the FR cards are bigger than the range of the goal
-	# Typically you would increase the FR cards by (for example) 5MHz so you can see more
-	# curve but you only want to optimize in the frequency band you care about.
-	if (defined($goal->{mhz_shrink}))
-	{
-		$mhz_min += $goal->{mhz_shrink};
-		$mhz_max -= $goal->{mhz_shrink};
-	}
-
-	# Shift the frequency to the left (-) or right (+) in case the curve needs to move.
-	if (defined($goal->{mhz_shift}))
-	{
-		$mhz_min += $goal->{mhz_shift};
-		$mhz_max += $goal->{mhz_shift};
-	}
 
 	# Find the index for the given frequency range:
 	my $mhz;
@@ -257,6 +242,11 @@ sub _goal_eval_mhz
 		$mag += $v**2;
 	}
 	
+	# Actual min/max of the parameter:
+	my ($value_min, $value_max) = minmax($p);
+	$self->{goal_status}->{$goal->{name}}{"$mhz_range->[0]-$mhz_range->[1]_min"} = $value_min;
+	$self->{goal_status}->{$goal->{name}}{"$mhz_range->[0]-$mhz_range->[1]_max"} = $value_max;
+	
 	$avg = $sum / $n;
 	$mag = sqrt($mag);
 
@@ -274,7 +264,7 @@ sub _goal_eval_mhz
 	$ret *= $weight;
 
 	my $name = $goal->{name} // '';
-	#print "Goal $name ($goal->{field}) is $ret [$min,$max]. Values $goal->{mhz_min} to $goal->{mhz_max} MHz:\n\t$p\n";
+
 	return $ret;
 }
 
@@ -287,6 +277,7 @@ sub _goal_eval_all
 	my $ret = 0;
 	foreach my $g (@$goals) {
 
+		# Default to enabled if undefined.
 		$g->{enabled} //= 1;
 		next if (!$g->{enabled});
 
@@ -324,8 +315,30 @@ sub _goal_eval_all
 
 		foreach my $mhz_range (@mhz_ranges)
 		{
-			# Default to enabled if undefined.
-			$ret += $self->_goal_eval_mhz($mhz_range, $vars, $csv, $g);
+			# Shrink the min/max values in case the FR cards are bigger than the range of the g
+			# Typically you would increase the FR cards by (for example) 5MHz so you can see more
+			# curve but you only want to optimize in the frequency band you care about.
+			if (defined($g->{mhz_shrink}))
+			{
+				$mhz_range->[0] += $g->{mhz_shrink};
+				$mhz_range->[1] -= $g->{mhz_shrink};
+			}
+
+			# Shift the frequency to the left (-) or right (+) in case the curve needs to move.
+			if (defined($g->{mhz_shift}))
+			{
+				$mhz_range->[0] += $g->{mhz_shift};
+				$mhz_range->[1] += $g->{mhz_shift};
+			}
+
+			my $result = $self->_goal_eval_mhz($mhz_range, $vars, $csv, $g);
+
+			# Return a non-pdl scalar value for logging, this is the value used
+			# by simplex to determine the goal:
+			$self->{goal_status}->{$g->{name}}{"$mhz_range->[0]-$mhz_range->[1]_spx"} = $result->sclr;
+
+			# Add the result to the final value:
+			$ret += $result;
 		}
 	}
 
