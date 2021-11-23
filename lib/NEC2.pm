@@ -86,6 +86,11 @@ sub card_filter
 {
 	my ($self, $card, @cards) = @_;
 
+	if (!@cards)
+	{
+		die "card_filter($card): No cards were defined for filtering";
+	}
+
 	$card = uc($card);
 
 	my @filter;
@@ -127,7 +132,7 @@ sub stringify
 	
 	# always put the GE card at the end of the geometry.  Default to freespace GE if
 	# none was defined:
-	my $GE = $self->card_filter('GE');
+	my $GE = $self->geo_card_filter('GE');
 	$GE //= GE();
 
 	# exclude GE, it goes above

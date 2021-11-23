@@ -9,8 +9,10 @@ use NEC2;
 use NEC2::xnec2c::optimize;
 use NEC2::Antenna::Yagi;
 
-
 use Data::Dumper;
+
+$SIG{__WARN__} = sub { print "\nWarning: $_[0]" . Dumper _build_stack() ; };
+$SIG{__DIE__} = sub { print "\nDie: $_[0]" . Dumper _build_stack() ; };
 
 if (!@ARGV)
 {
@@ -60,13 +62,18 @@ print $xnec2c->print_nec2_final();
 
 exit 0;
 
-#####################################################################
-#                                                           Functions
+## functions
 
-# Globals for the functions:
-my $log_count = 0;
+sub _build_stack
+{
+	my $i = 0;
+	my @msg;
+	while (my @c = caller($i++)) {
+		my @c0 = caller($i);
+		my $caller = '';
+		$caller = " ($c0[3])" if (@c0);
+		push @msg, "  $i. $c[1]:$c[2]:$caller while calling $c[3]";
+	}
 
-
-
-
-
+	return \@msg;
+}
