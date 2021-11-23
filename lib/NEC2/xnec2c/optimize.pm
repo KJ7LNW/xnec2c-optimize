@@ -298,6 +298,7 @@ sub _goal_eval_all
 			my $v = $g->{result}->($vars, $csv); 
 			print "Goal $g->{name} is $v\n";
 			$ret += $v * $g->{weight};
+			next;
 		}
 
 		my @mhz_ranges;
