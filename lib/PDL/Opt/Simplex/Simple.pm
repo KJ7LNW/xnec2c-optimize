@@ -129,6 +129,14 @@ sub _get_vars
 		{
 			$h{$var} = $vars->{$var};
 		}
+		elsif (ref($vars->{$var}) eq '')
+		{
+			$h{$var} = [ $vars->{$var} ];
+		}
+		else
+		{
+			die "unknown ref for var=$var: " . ref($vars->{$var});
+		}
 
 		if (scalar(@{ $h{$var} } ) == 1)
 		{
@@ -146,9 +154,19 @@ sub _build_simplex_vars
 
 	# first element is for simplex's return-value use, set it to 0.	
 	my @pdl_vars = (0);
+
 	foreach my $var_name (sort keys(%$vars))
 	{
 		my $var = $vars->{$var_name};
+
+		if (ref($var) eq '')
+		{
+			$var = $vars->{$var_name} = { values => [ $vars->{$var_name} ] }
+		}
+		elsif (ref($var) eq 'ARRAY')
+		{
+			$var = $vars->{$var_name} = { values => $vars->{$var_name} }
+		}
 
 		my $n = scalar(@{ $var->{values} });
 
