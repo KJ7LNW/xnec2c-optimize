@@ -75,4 +75,25 @@ sub geo_cards
 
 }
 
+sub set_special
+{
+	my ($self, $var, $val) = @_;
+
+	# [ [x1,y1,z1] => [x2,y2,z2] ]
+	if ($var eq 'points')
+	{
+		$self->set_card_var("x1", $val->[0]->[0]);
+		$self->set_card_var("y1", $val->[0]->[1]);
+		$self->set_card_var("z1", $val->[0]->[2]);
+
+		$self->set_card_var("x2", $val->[1]->[0]);
+		$self->set_card_var("y2", $val->[1]->[1]);
+		$self->set_card_var("z2", $val->[1]->[2]);
+
+		return 1;
+	}
+
+	return 0;
+}
+
 1;
