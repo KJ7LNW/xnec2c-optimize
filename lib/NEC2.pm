@@ -32,6 +32,8 @@ use NEC2::Card::SP;
 use NEC2::Card::TL;
 use NEC2::Card::ZO;
 
+require NEC2::Polyline;
+
 BEGIN {
 	our @ISA = qw(Exporter);
 	our @EXPORT = (
@@ -39,7 +41,13 @@ BEGIN {
 		qw/GA GE GF GH GM GR GS GW GC GX SP SM/,
 
 		# Program card functions
-		qw/CP EK EN EX FR GD GN KH LD NE NH NT NX PQ PT RP TL WG XQ ZO Z0/
+		qw/CP EK EN EX FR GD GN KH LD NE NH NT NX PQ PT RP TL WG XQ/,
+
+		# xnec2c extensions:
+		qw/ZO Z0/,
+
+		# Perl NEC2 extensions:
+		qw/Polyline/,
 	);
 }
 
@@ -216,5 +224,8 @@ sub XQ { return NEC2::Card::XQ->new(@_) }  # Execute
 # xnec2c extensions
 sub ZO { return NEC2::Card::ZO->new(@_) }  # Charectaristic Impedance
 sub Z0 { return NEC2::Card::ZO->new(@_) }  # Charectaristic Impedance (Z-zero alias)
+
+# Perl NEC2 extensions:
+sub Polyline { return NEC2::Polyline->new(@_) }  # GW card generator
 
 1;

@@ -280,6 +280,12 @@ sub is_program_card
 	return scalar(grep { $_ eq $card_name } program_card_names());
 }
 
+sub is_card
+{
+	my $self = shift;
+	return $self->is_geo_card || $self->is_program_card;
+}
+
 
 #####################################################################
 # Classful internal functions, not intended for user use.
