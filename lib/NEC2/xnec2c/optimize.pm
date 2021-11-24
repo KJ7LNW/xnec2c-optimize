@@ -227,7 +227,7 @@ sub _goal_eval_mhz
 		if ($v eq pdl(['inf']))
 		{
 			warn "result($goal->{field}) at index $i is infinite, using 1e6";
-			$v = 1e6;
+			$v = pdl 1e6;
 		}
 		if ($v eq pdl(['nan']) || $v eq pdl(['-nan']))
 		{
@@ -318,6 +318,12 @@ sub _goal_eval_all
 			# Shrink the min/max values in case the FR cards are bigger than the range of the g
 			# Typically you would increase the FR cards by (for example) 5MHz so you can see more
 			# curve but you only want to optimize in the frequency band you care about.
+			if (defined($g->{mhz_shrink}) && (
+				$mhz_range->[0]+$g->{mhz_shrink} > $mhz_range->[1] || 
+				$mhz_range->[0]+$g->{mhz_shrink} < $mhz_range->[0]))
+			{
+				die "mhz_shrink'ing $mhz_range->[0] to $mhz_range->[1] MHz by $g->{mhz_shrink} MHz is out of range";
+			}
 			if (defined($g->{mhz_shrink}))
 			{
 				$mhz_range->[0] += $g->{mhz_shrink};
@@ -325,6 +331,14 @@ sub _goal_eval_all
 			}
 
 			# Shift the frequency to the left (-) or right (+) in case the curve needs to move.
+
+			if (defined($g->{mhz_shift}) && (
+				$mhz_range->[0]+$g->{mhz_shift} > $mhz_range->[1] || 
+				$mhz_range->[0]+$g->{mhz_shift} < $mhz_range->[0]))
+			{
+				die "mhz_shift from $mhz_range->[0] of $g->{mhz_shift} MHz is out of range";
+			}
+
 			if (defined($g->{mhz_shift}))
 			{
 				$mhz_range->[0] += $g->{mhz_shift};
