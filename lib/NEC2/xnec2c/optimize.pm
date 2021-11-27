@@ -44,7 +44,7 @@ sub new
 		log  =>  sub  {  $self->_log(@_)                       },
 		%{ $self->{simplex} });
 	
-	print Dumper $self;
+	#print Dumper $self;
 
 	# simplex, vars, nec2, goals, filename_nec_csv, filename_nec
 	return $self;
@@ -56,7 +56,7 @@ sub optimize
 
 	$self->{log_count} = 0;
 
-	$self->{result} = $self->{simplex}->optimize();
+	$self->{simplex}->optimize();
 
 }
 
@@ -65,7 +65,7 @@ sub print_vars_initial
 	my $self = shift;
 	print "===== Initial Condition ==== \n";
 
-	print Dumper($self->{simplex}->get_vars_initial) . "\n";
+	print Dumper($self->{simplex}->get_vars_simple) . "\n";
 }
 
 sub print_vars_result
@@ -73,33 +73,33 @@ sub print_vars_result
 	my $self = shift;
 	print "===== Result ==== \n";
 
-	print Dumper($self->{result}) . "\n";
+	print Dumper($self->{simplex}->get_result_simple) . "\n";
 }
 
 sub print_nec2_initial
 {
 	my $self = shift;
-	print $self->{nec2}->($self->{simplex}->get_vars_initial);
+	print $self->{nec2}->($self->{simplex}->get_vars_simple);
 }
 
 sub print_nec2_final
 {
 	my $self = shift;
-	print $self->{nec2}->($self->{result});
+	print $self->{nec2}->($self->{simplex}->get_result_simple);
 }
 
 sub save_nec_initial
 {
 	my $self = shift;
 
-	$self->_xnec2c_optimize_callback($self->{simplex}->get_vars_initial);
+	$self->_xnec2c_optimize_callback($self->{simplex}->get_vars_simple);
 }
 
 sub save_nec_final
 {
 	my $self = shift;
 
-	$self->_xnec2c_optimize_callback($self->{result});
+	$self->_xnec2c_optimize_callback($self->{simplex}->get_result_simple);
 }
 
 sub _xnec2c_optimize_callback

@@ -27,6 +27,8 @@ sub new
 		$self->{srand} = srand();
 	}
 
+	$self->set_vars($self->{vars});
+
 	# vars, ssize, tolerance, max_iter, f, log
 	return $self;
 }
@@ -35,7 +37,7 @@ sub optimize
 {
 	my $self = shift;
 
-	my $vec_initial = $self->_build_simplex_vars($self->{vars});
+	my $vec_initial = $self->_build_simplex_vars();
 
 	my ( $vec_optimal, $opt_ssize, $optval ) = simplex($vec_initial,
 		$self->{ssize},
@@ -87,32 +89,250 @@ sub optimize
 	$self->{opt_ssize} = $opt_ssize;
 	$self->{minima} = $optval->sclr;
 
-	return $self->_get_simplex_vars($vec_optimal);
+	# Return the result in the original vars format that was
+	# passed to new(vars => {...}) so it matches what the user
+	# is expecting by converting it from simple to expanded
+	# and finally to original:
+	
+	my $result = $self->_get_simplex_vars($vec_optimal);
+
+	$result = _simple_to_expanded($result);
+	$result = $self->_expanded_to_original();
+
+	# Store the result in the user's format:
+	$self->{result} = $result;
+
+	return $result;
 }
 
-sub get_vars_initial
+sub get_vars_expanded
 {
 	my $self = shift;
 
-	return _get_vars($self->{vars});
+	return $self->{vars};
+}
+
+sub get_vars_orig
+{
+	my $self = shift;
+
+	return $self->{_vars_orig};
+}
+
+
+sub get_vars_simple
+{
+	my $self = shift;
+
+	return _expanded_to_simple($self->{vars});
+}
+
+sub get_result_expanded
+{
+	my $self = shift;
+
+	return $self->{result};
+}
+
+sub get_result_simple
+{
+	my $self = shift;
+
+	return _expanded_to_simple($self->{result});
 }
 
 sub set_vars
 {
 	my ($self, $vars) = @_;
 
-	# validate vars, will die if invalid:
-	_get_vars($self->{vars});
+	# _simple_to_expanded will die if invalid:
+	$self->{_vars_orig} = $vars;
+	$self->{vars} = _simple_to_expanded($vars);
+}
 
-	$self->{vars} = $vars;
+sub set_ssize
+{
+	my ($self, $ssize) = @_;
 
-	# return user-formated vars:
-	return $self->get_vars_initial();
+	$self->{ssize} = $ssize;
+}
 
+sub scale_ssize
+{
+	my ($self, $scale) = @_;
+
+	$self->{ssize} *= $scale;
+}
+
+
+
+# build a pdl for use by simplex()
+sub _build_simplex_vars 
+{
+	my ($self) = @_;
+
+	my $vars = $self->{vars};
+
+	# first element is for simplex's return-value use, set it to 0.	
+	my @pdl_vars = (0);
+
+	foreach my $var_name (sort keys(%$vars))
+	{
+		my $var = $vars->{$var_name};
+
+		my $n = scalar(@{ $var->{values} });
+
+		for (my $i = 0; $i < $n; $i++)
+		{
+			# var is enabled for simplex if enabled[$i] == 1
+			if ($var->{enabled}->[$i])
+			{
+				push(@pdl_vars, $var->{values}->[$i] / $var->{perturb_scale}->[$i]);
+			}
+		}
+	}
+
+	return pdl \@pdl_vars;
+}
+
+sub _simple_to_expanded
+{
+	my $vars = shift;
+
+	my %valid_opts = map { $_ => 1 } qw/values enabled minmax perturb_scale/;
+
+	my %exp;
+	foreach my $var_name (keys(%$vars))
+	{
+		my $var = $vars->{$var_name};
+
+		# Copy the structure from what was passed into the %exp
+		# hash so we can modify it without changing the orignal.
+		if (ref($var) eq '')
+		{
+			$var = $exp{$var_name} = { values => [ $vars->{$var_name} ] }
+		}
+		elsif (ref($var) eq 'ARRAY')
+		{
+			$var = $exp{$var_name} = { values => $vars->{$var_name} }
+		}
+		elsif (ref($var) eq 'HASH')
+		{
+			my $newvar = $exp{$var_name} = {};
+
+			foreach my $opt (keys %$var)
+			{
+				die "invalid option for $var_name: $opt" if (!$valid_opts{$opt});
+			}
+
+			$newvar->{values} = $var->{values} if exists($var->{values});
+			$newvar->{enabled} = $var->{enabled} if exists($var->{enabled});
+			$newvar->{minmax} = $var->{minmax} if exists($var->{minmax});
+			$newvar->{perturb_scale} = $var->{perturb_scale} if exists($var->{perturb_scale});
+
+			$var = $newvar;
+		}
+		else
+		{
+			die "invalid type for $var: " . ref($var);
+		}
+
+		# Make sure values is valid:
+		if (!defined($var->{values}) || !$var->{values} ||
+			(ref($var->{values}) eq 'ARRAY' && !@{$var->{values}}))
+		{
+			die "$var_name\-\>{values} must be defined"
+		}
+
+		if (ref($var->{values}) eq 'ARRAY')
+		{
+			# make a copy to release the original reference: 
+			$var->{values} = [ @{ $var->{values} } ];
+		}
+		elsif (ref($var->{values}) eq '')
+		{
+			$var->{values} = [ $var->{values} ];
+		}
+		else
+		{
+			die "invalid type for $var_name\-\>{values}: " . ref($var->{values});
+		}
+
+		my $n = scalar(@{ $var->{values} });
+
+
+		# If enabled is missing or a non-scalar (ie =1 or =0) then form it properly
+		# as either all 1's or all 0's:
+		if (!defined($var->{enabled}) || (!ref($var->{enabled}) && $var->{enabled}))
+		{
+			$var->{enabled} = [ map { 1 } (1..$n) ] 
+		}
+		elsif (defined($var->{enabled}) && !ref($var->{enabled}) && !$var->{enabled})
+		{
+			$var->{enabled} = [ map { 0 } (1..$n) ] 
+		}
+
+		if (ref($var->{minmax}) eq 'ARRAY' && ref($var->{minmax}->[0]) eq '' && @{$var->{minmax}} == 2)
+		{
+			$var->{minmax} = [ map { $var->{minmax} } (1..$n) ];
+		}
+
+		# Default the perturb_scale to 1x
+		$var->{perturb_scale} //= [ map { 1 } (1..$n) ];
+
+		# Make it an array the of length $n:
+		if (!ref($var->{perturb_scale}))
+		{
+			$var->{perturb_scale} = [ map { $var->{perturb_scale} } (1..$n) ] 
+		}
+
+		# Sanity checks
+		if (defined($var->{enabled}) && $n != scalar(@{ $var->{enabled} }))
+		{
+			die "variable $var must have the same length array for 'values' as for 'enabled'"
+		}
+
+		if (defined($var->{perturb_scale}) && $n != scalar(@{ $var->{perturb_scale} }))
+		{
+			die "variable $var must have the same length array for 'values' as for 'perturb_scale'"
+		}
+
+		if (defined($var->{minmax}))
+		{
+			if ($n != scalar(@{ $var->{minmax} }))
+			{
+				die "variable $var must have the same length array for 'values' as for 'minmax'"
+			}
+
+			for (my $i = 0; $i < $n; $i++)
+			{
+				my $mm = $var->{minmax}->[$i];
+
+				if (ref($mm) ne 'ARRAY' || @$mm != 2)
+				{
+					die "$var_name\-\>{minmax} is not a 2-dimensional arrayref with [min,max] for each.";
+				}
+
+				my ($min, $max) = @$mm;
+
+				if ($var->{values}->[$i] < $min)
+				{
+					die "initial value for $var_name\[$i] beyond constraint: $var->{values}->[$i] < $min " 
+				}
+
+				if ($var->{values}->[$i] > $max)
+				{
+					die "initial value for $var_name\[$i] beyond constraint: $var->{values}->[$i] > $max " 
+				}
+			}
+		}
+	}
+
+	return \%exp;
 }
 
 # Return vars as documented below in POD:
-sub _get_vars
+sub _expanded_to_simple
 {
 	my $vars = shift;
 
@@ -147,61 +367,53 @@ sub _get_vars
 	return \%h;
 }
 
-# build a pdl for use by simplex()
-sub _build_simplex_vars 
+
+# Return the $exp vars in the same original format as defined by $orig.  This is called as follows:
+#   $self->_expanded_to_original($self->{vars})
+#
+sub _expanded_to_original
 {
-	my ($self, $vars) = @_;
+	my ($self, $exp) = @_;
 
-	# first element is for simplex's return-value use, set it to 0.	
-	my @pdl_vars = (0);
+	my $orig = $self->{_vars_orig};
 
-	foreach my $var_name (sort keys(%$vars))
+	my %result;
+	foreach my $var_name (keys(%$orig))
 	{
-		my $var = $vars->{$var_name};
-
-		if (ref($var) eq '')
+		if (ref($orig->{$var_name}) eq '')
 		{
-			$var = $vars->{$var_name} = { values => [ $vars->{$var_name} ] }
+			$result{$var_name} = $exp->{$var_name}->{values}->[0];
 		}
-		elsif (ref($var) eq 'ARRAY')
+		elsif (ref($orig->{$var_name}) eq 'ARRAY')
 		{
-			$var = $vars->{$var_name} = { values => $vars->{$var_name} }
+			$result{$var_name} = [ @{ $exp->{$var_name}->{values} } ];
 		}
-
-		my $n = scalar(@{ $var->{values} });
-
-		# If enabled is missing or a non-scalar (ie =1 or =0) then form it properly
-		# as either all 1's or all 0's:
-		if (!defined($var->{enabled}) || (!ref($var->{enabled}) && $var->{enabled}))
+		elsif (ref($orig->{$var_name}) eq 'HASH')
 		{
-			$var->{enabled} = [ map { 1 } @{ $var->{values} } ] 
-		}
-		elsif (defined($var->{enabled}) && !ref($var->{enabled}) && !$var->{enabled})
-		{
-			$var->{enabled} = [ map { 0 } @{ $var->{values} } ] 
-		}
+			my $origvar = $orig->{$var_name};
+			my $newvar = {};
 
-		if (defined($var->{enabled}) && $n != scalar(@{ $var->{enabled} }))
-		{
-			die "variable $var must have the same length array for 'values' as for 'enabled'"
-		}
-
-
-		for (my $i = 0; $i < $n; $i++)
-		{
-			# var is enabled for simplex if enabled[$i] == 1
-			if ($var->{enabled}->[$i])
+			if (ref($orig->{$var_name}->{values}) eq 'ARRAY')
 			{
-				push(@pdl_vars, $var->{values}->[$i]);
+				$newvar->{values} = [ @{ $exp->{$var_name}->{values} } ];
 			}
+			else
+			{
+				$newvar->{values} = $exp->{$var_name}->{values}->[0];
+			}
+			$newvar->{enabled} = $origvar->{enabled} if exists($origvar->{enabled});
+			$newvar->{minmax} = $origvar->{minmax} if exists($origvar->{minmax});
+			$newvar->{perturb_scale} = $origvar->{perturb_scale} if exists($origvar->{perturb_scale});
+
+			$result{$var_name} = $newvar;
 		}
 	}
 
-	return pdl \@pdl_vars;
+	return \%result;
 }
 
 # get a var by name from $self->{vars} but get the value from the pdl if
-# the var is enabled for optimization.
+# the var is enabled for optimization. Also minmax/perturb_scale as if defined
 sub _get_simplex_var
 {
 	my ($self, $pdl, $var_name) = @_;
@@ -223,6 +435,9 @@ sub _get_simplex_var
 		# done if we find it:
 		last if $vn eq $var_name;
 
+		# Increment pdl_idx for each element of the {enabled} array
+		# that is enabled because that is how it is packed into the pdl.
+		# The value of $_ in grep{} is either 1 or 0:
 		$pdl_idx++ foreach (grep { $_ } @{ $var->{enabled} });
 	}
 	
@@ -230,21 +445,33 @@ sub _get_simplex_var
 	{
 		# use the pdl index if it is enabled for optimization
 		# otherwise use the original index in $var.
+
+		my $val;
 		if ($var->{enabled}->[$i])
 		{
-			push(@ret, unpdl($pdl->slice("($pdl_idx)", 0))->[0]);
+			$val = unpdl($pdl->slice("($pdl_idx)", 0))->[0];
+			$val *= $var->{perturb_scale}->[$i];
 			$pdl_idx++;
 		}
 		else
 		{
-			push(@ret, $var->{values}->[$i]);
+			$val = $var->{values}->[$i];
 		}
+
+		if (defined($var->{minmax}))
+		{
+			my ($min, $max) = @{ $var->{minmax}->[$i] };
+			$val = $min if ($val < $min);
+			$val = $max if ($val > $max);
+		}
+
+		push @ret, $val 
 	}
 
 	return \@ret;
 }
 
-# get all vars
+# get all vars replaced with resultant simplex values if enabled=>1 for that var.
 sub _get_simplex_vars
 {
 	my ($self, $pdl) = @_;	
@@ -314,7 +541,7 @@ PDL::Opt::Simplex::Simple - A simplex optimizer for the rest of us
 				# and return() the result to be minimized by simplex.
 			},
 		log => sub { }, # log callback
-		ssize => 0.1,   # initial simplex size, smaller means less purturbation
+		ssize => 0.1,   # initial simplex size, smaller means less perturbation
 		max_iter => 100 # max iterations
 	);
 
@@ -352,9 +579,34 @@ callback function.
 
 =head1 FUNCTIONS
 
-=item * new(%args) - Instantiate class
+=item * $self->new(%args) - Instantiate class
 
-=item * optimize() - Run the optimization
+=item * $self->optimize() - Run the optimization
+
+=item * $self->get_vars_expanded() - Returns the original C<vars> in a fully expanded format
+
+=item * $self->get_vars_simple() - Returns C<vars> in the simplified format
+
+This format is suitable for passing into your C<f> callback.
+
+=item * $self->get_vars_orig() - Returns C<vars> in originally passed format
+
+=item * $self->get_result_expanded() - Returns the optimization result in expanded format.
+
+=item * $self->get_result_simple() - Returns the optimization result in the simplified format
+
+This format is suitable for passing into your C<f> callback.
+
+=item * $self->set_vars(\%vars) - Set C<vars> as if passed to the constructor.
+
+This can be used to feed a result from $self->get_result_expanded() into
+a new refined simplex iteration.
+
+=item * $self->set_ssize($ssize) - Set C<ssize> as if passed to the constructor.
+
+Useful for calling simplex again with refined values
+
+=item * $self->scale_ssize($scale) - Multiply the current C<ssize> by C<$scale>
 
 =head1 ARGUMENTS
 
@@ -393,16 +645,48 @@ for that index.
 Expanded format:  
 
 	vars => {
-		varname => { "values" => [...], "enabled" => [...] }, ...
+		varname => {
+			"values"         =>  [...],
+			"minmax"         =>  [ [min=>max],  ...
+			"perturb_scale"  =>  [...],
+			"enabled"        =>  [...],
+		},  ...
 	}
 
 =item C<varname>: the name of the variable being used.
 
 =item C<values>:  an arrayref of values to be optimized
 
-=item C<enabled>: 1 or 0: enabled a specific index to be optimized.
+=item C<minmax>:  a double-array of min-max pairs (per index for vectors)
 
-=head4 Notes:
+Min-max pairs are clamped before being evaluated by simplex.
+
+=item C<perturb_scale>:  Scale parameter before being evaluated by simplex (per index for vectors)
+
+=over 4
+
+This is useful because Simplex's C<ssize> parameter is the same for all
+values and you may find that some values need to be perturbed more or
+less than others while simulating.  User interaction with C<f> and the
+result of C<optimize> will use the normally scaled values supplied by
+the user, this is just an internal scale for simplex.
+
+=item Bigger value:  perturb more
+
+=item Smaller value:  perturb less
+
+Internal details: The value passed to simplex is divided by perturb_scale
+parameter before being passed and multiplied by perturb_scale when
+returned.  Thus, perturb_scale=0.1 would make simplex see the value as
+being 10x larger effectively perturbing it less, whereas, perturb_scale=10
+would make it 10x smaller and perturb it more.
+
+=back
+
+
+=item C<enabled>: 1 or 0: enabled a specific index to be optimized (per index for vectors)
+
+=over 4
 
 =item * If 'enabled' is undefined then all values are enabled.
 
@@ -417,19 +701,22 @@ Internally, all values are vectors, even if the vectors are of length 1,
 but you can pass them as singletons like C<spaces> is shown below if
 you need to disable a single value:
 
-	# Element lengths                                                
-	vars => {
-		lengths => {                                                     
-				        values  => [ 1.038, 0.955, 0.959, 0.949, 0.935 ],
-				        enabled => [ 1,     1,     1,     0,     1 ]     
-		},                                                       
-		spaces => {
-			values => 5, 
-			enabled => 0
-		},
-		...
-	}
+    # Element lengths                                                
+    vars => {
+        lengths => {                                                     
+            values         =>  [  1.038,       0.955,        0.959 ],
+            minmax         =>  [  [0.5=>1.5],  [[0.3=>1.2],  [0.2=>1.1] ],
+            perturb_scale  =>  [  10,          100,          1 ],
+            enabled        =>  [  1,           1,            1 ],
+        },                                                       
+        spaces => {
+            values => 5, 
+            enabled => 0
+        },
+        ...
+    }
 
+=back
 
 =head2 * C<f> - Callback function to operate upon C<vars>
 
@@ -438,11 +725,12 @@ the Simple Format and must return a scalar result:
 
 	f->({ lengths => [ 1.038, 0.955, 0.959, 0.949, 0.935 ], spaces => 5 });
 
-Note that a single-length vector will be passed as a scalar:
+Note that a single-length vector will always be passed as a scalar to C<f>:
 
 	vars => { x => [5] } will be passed as f->({ x => 5 })
 
-The Simplex algorithm will work to minimize the return value of your C<f> coderef.
+The Simplex algorithm will work to minimize the return value of your C<f> coderef, so return 
+smaller values as your variables change to produce a (more) desired outcome.
 
 =head2 * C<log> - Callback function log status for each iteration.
 
