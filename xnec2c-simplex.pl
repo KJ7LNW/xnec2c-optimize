@@ -27,6 +27,8 @@ my $filename_nec_csv = $ARGV[0];
 $filename_nec =~ s/\.conf$//;
 $filename_nec .= ".nec";
 
+die "file not found: $filename_config" if (! -e $filename_config);
+
 my $config = do($filename_config);
 die $@ if $@;
 
@@ -35,8 +37,6 @@ my $xnec2c = NEC2::xnec2c::optimize->new(
 	%$config);
 
 $xnec2c->print_vars_initial();
-
-
 
 print "===== Writing NEC2 output to $filename_nec =====\n\n";
 
@@ -47,6 +47,8 @@ $xnec2c->save_nec_initial();
 
 print $xnec2c->print_nec2_initial();
 
+print "\nPress enter to start\n";
+<STDIN>;
 
 print "\n===== Starting Optimization ==== \n";
 
