@@ -27,6 +27,18 @@ sub new
 		$self->{srand} = srand();
 	}
 
+	# _ssize is the array for multiple simplex retries.
+	if (ref($self->{ssize}) eq 'ARRAY')
+	{
+		$self->{_ssize} = $self->{ssize};
+
+		$self->{ssize} = $self->{ssize}[0];
+	}
+	else
+	{
+		$self->{_ssize} = [ $self->{ssize} ];
+	}
+
 	$self->set_vars($self->{vars});
 
 	# vars, ssize, tolerance, max_iter, f, log
@@ -34,6 +46,26 @@ sub new
 }
 
 sub optimize
+{
+	my $self = shift;
+
+	if (@{ $self->{_ssize} } == 1)
+	{
+		return $self->_optimize;
+	}
+
+	my $result;
+	foreach my $ssize (@{ $self->{_ssize} })
+	{
+		$self->set_ssize($ssize);
+		$result = $self->_optimize;
+		$self->set_vars($result);
+	}
+
+	return $result;
+}
+
+sub _optimize
 {
 	my $self = shift;
 
@@ -97,7 +129,7 @@ sub optimize
 	my $result = $self->_get_simplex_vars($vec_optimal);
 
 	$result = _simple_to_expanded($result);
-	$result = $self->_expanded_to_original();
+	$result = $self->_expanded_to_original($result);
 
 	# Store the result in the user's format:
 	$self->{result} = $result;
@@ -358,7 +390,7 @@ sub _expanded_to_simple
 			die "unknown ref for var=$var: " . ref($vars->{$var});
 		}
 
-		if (scalar(@{ $h{$var} } ) == 1)
+		if (ref($h{$var}) eq 'ARRAY' && scalar(@{ $h{$var} } ) == 1)
 		{
 			$h{$var} = $h{$var}->[0];
 		}
@@ -767,6 +799,15 @@ require some trial and error to tune it where you need it to be.
 Example for optimizing geometry in an EM simulation: Because it is
 proportional to wavelength, lower frequencies need a larger value and
 higher frequencies need a lower value.
+
+The C<ssize> parameter may be an arrayref.  If an arrayref is specified
+then it will run simplex to completion using the first ssize and then
+restart with the next C<ssize> value in the array.  Each iteration uses
+the best result as the input to the next simplex iteration in an attempt
+to find increasingly better results.  For example, 4 iterations with each
+C<ssize> one-half of the previous:
+
+	ssize => [ 4, 2, 1, 0.5 ]
 
 
 Default: 0.1
