@@ -58,6 +58,7 @@ sub optimize
 
 	$self->{simplex}->optimize();
 
+	return $self->{simplex}->get_result_expanded();
 }
 
 sub print_vars_initial
