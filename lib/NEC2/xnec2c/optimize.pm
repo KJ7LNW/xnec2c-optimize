@@ -59,6 +59,14 @@ sub optimize
 	return $self->{simplex}->get_result_expanded();
 }
 
+sub print_vars
+{
+	my ($self, $vars) = @_;
+
+	print "===== Variables ==== \n";
+	print Dumper $vars;
+}
+
 sub print_vars_initial
 {
 	my $self = shift;
@@ -83,10 +91,17 @@ sub print_nec2_initial
 	print $self->{nec2}->($self->{simplex}->get_vars_simple);
 }
 
-sub print_nec2_final
+sub print_nec2_result
 {
 	my $self = shift;
 	print $self->{nec2}->($self->{simplex}->get_result_simple);
+}
+
+sub print_goal_status
+{
+	my $self = shift;
+	print "===== Goal Status ==== \n";
+	print Dumper($self->{goal_status});
 }
 
 sub save_nec_initial
@@ -96,7 +111,7 @@ sub save_nec_initial
 	$self->_xnec2c_optimize_callback($self->{simplex}->get_vars_simple);
 }
 
-sub save_nec_final
+sub save_nec_result
 {
 	my $self = shift;
 
@@ -140,7 +155,10 @@ sub _log
 	
 	if (!$status->{cancel})
 	{
-		print Dumper($vars, $self->{goal_status}) . "\n\n";
+		$self->print_vars($vars);
+		$self->print_goal_status;
+
+		print "\n\n";
 	}
 
 	printf "%s %.2fs pass #%d/%d (best=%d): %d/%d  %.3g > %.3g, minima=%.3g (%d/%d retries)\n",

@@ -11,7 +11,7 @@ use NEC2::Antenna::Yagi;
 
 use Data::Dumper;
 
-$SIG{__WARN__} = sub { print "\nWarning: $_[0]" . Dumper _build_stack() ; };
+#$SIG{__WARN__} = sub { print "\nWarning: $_[0]" . Dumper _build_stack() ; };
 $SIG{__DIE__} = sub { print "\nDie: $_[0]" . Dumper _build_stack() ; };
 
 if (!@ARGV)
@@ -60,7 +60,9 @@ print "\n===== Done! ==== \n";
 $xnec2c->print_vars_result();
 
 print "\n===== $filename_nec ==== \n";
-print $xnec2c->print_nec2_final();
+$xnec2c->save_nec_result();
+print $xnec2c->print_nec2_result();
+
 
 exit 0;
 

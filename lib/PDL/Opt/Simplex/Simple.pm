@@ -1,8 +1,10 @@
+			
 package PDL::Opt::Simplex::Simple;
 
 use strict;
 use warnings;
 
+use Math::Round qw/nearest/;
 use Time::HiRes qw/time/;
 
 use PDL;
@@ -188,7 +190,11 @@ sub _optimize
 	#my $result = $self->_get_simplex_vars($vec_optimal);
 
 	$result = _simple_to_expanded($result);
+
 	$result = $self->_expanded_to_original($result);
+
+	# Round final values if any vars have round_final defined:
+	_vars_round_final($result);
 
 	# Store the result in the user's format:
 	$self->{result} = $result;
@@ -288,9 +294,9 @@ sub _build_simplex_vars
 
 sub _simple_to_expanded
 {
-	my $vars = shift;
+	my ($vars) = @_;
 
-	my %valid_opts = map { $_ => 1 } qw/values enabled minmax perturb_scale/;
+	my %valid_opts = map { $_ => 1 } qw/values enabled minmax perturb_scale round_each round_final/;
 
 	my %exp;
 	foreach my $var_name (keys(%$vars))
@@ -316,10 +322,10 @@ sub _simple_to_expanded
 				die "invalid option for $var_name: $opt" if (!$valid_opts{$opt});
 			}
 
-			$newvar->{values} = $var->{values} if exists($var->{values});
-			$newvar->{enabled} = $var->{enabled} if exists($var->{enabled});
-			$newvar->{minmax} = $var->{minmax} if exists($var->{minmax});
-			$newvar->{perturb_scale} = $var->{perturb_scale} if exists($var->{perturb_scale});
+			foreach my $opt (keys %valid_opts)
+			{
+				$newvar->{$opt} = $var->{$opt} if exists($var->{$opt});
+			}
 
 			$var = $newvar;
 		}
@@ -375,6 +381,16 @@ sub _simple_to_expanded
 		if (!ref($var->{perturb_scale}))
 		{
 			$var->{perturb_scale} = [ map { $var->{perturb_scale} } (1..$n) ] 
+		}
+
+		if (defined($var->{round_each}) && !ref($var->{round_each}))
+		{
+			$var->{round_each} = [ map { $var->{round_each} } (1..$n) ] 
+		}
+
+		if (defined($var->{round_final}) && !ref($var->{round_final}))
+		{
+			$var->{round_final} = [ map { $var->{round_final} } (1..$n) ] 
 		}
 
 		# Sanity checks
@@ -492,15 +508,50 @@ sub _expanded_to_original
 			{
 				$newvar->{values} = $exp->{$var_name}->{values}->[0];
 			}
-			$newvar->{enabled} = $origvar->{enabled} if exists($origvar->{enabled});
-			$newvar->{minmax} = $origvar->{minmax} if exists($origvar->{minmax});
-			$newvar->{perturb_scale} = $origvar->{perturb_scale} if exists($origvar->{perturb_scale});
+
+			foreach my $opt (qw/enabled minmax perturb_scale round_each round_final/)
+			{
+				$newvar->{$opt} = $origvar->{$opt} if exists($origvar->{$opt});
+			}
 
 			$result{$var_name} = $newvar;
 		}
 	}
 
 	return \%result;
+}
+
+# Use the round_final attribute of each var (if defined) to round
+# the var to its nearest value.  $vars must be in expanded format.
+sub _vars_round_final
+{
+	my ($vars) = @_;
+
+	foreach my $var (values(%$vars))
+	{
+		my @round_final;
+
+		next unless defined $var->{round_final};
+
+		my $n = @{ $var->{values} };
+
+		# use temp var @round_final so we don't mess with the $vars structure.
+		if (!ref($var->{round_final}))
+		{
+			@round_final = map { $var->{round_final} } (1..$n);
+		}
+		else 
+		{
+			@round_final = @{ $var->{round_final} };
+		}
+
+		# Round to a precision if defined:
+		foreach (my $i = 0; $i < $n; $i++)
+		{
+			$var->{values}->[$i] = nearest($round_final[$i], $var->{values}->[$i]);
+		}
+	}
+
 }
 
 # get a var by name from $self->{vars} but get the value from the pdl if
@@ -534,10 +585,10 @@ sub _get_simplex_var
 	
 	for (my $i = 0; $i < $n; $i++)
 	{
+		my $val;
+
 		# use the pdl index if it is enabled for optimization
 		# otherwise use the original index in $var.
-
-		my $val;
 		if ($var->{enabled}->[$i])
 		{
 			$val = unpdl($pdl->slice("($pdl_idx)", 0))->[0];
@@ -549,6 +600,7 @@ sub _get_simplex_var
 			$val = $var->{values}->[$i];
 		}
 
+		# Modify the resulting value depending on these rules:
 		if (defined($var->{minmax}))
 		{
 			my ($min, $max) = @{ $var->{minmax}->[$i] };
@@ -556,7 +608,16 @@ sub _get_simplex_var
 			$val = $max if ($val > $max);
 		}
 
-		push @ret, $val 
+		# Round to the nearest value on each iteration.
+		# It is probably best to round at the end to keep
+		# precision during each iteration, but the option
+		# is available:
+		if (defined($var->{round_each}))
+		{
+			$val = nearest($var->{round_each}->[$i], $val);
+		}
+
+		push @ret, $val; 
 	}
 
 	return \@ret;
@@ -751,6 +812,27 @@ Expanded format:
 =item C<minmax>:  a double-array of min-max pairs (per index for vectors)
 
 Min-max pairs are clamped before being evaluated by simplex.
+
+=item C<round_final>:  Round the value to the nearest increment of this value upon completion
+
+You may need to round the final output values to a real-world limit after optimization
+is complete.  Setting round_final will round after optimization finishes, but leave 
+full precision while iterating.  See also: C<round_each>.
+
+This funciton uses L<Math::Round>'s C<nearest> function:
+
+	nearest(10, 44)    yields  40
+	nearest(10, 46)            50
+	nearest(10, 45)            50
+	nearest(25, 328)          325
+	nearest(.1, 4.567)          4.6
+	nearest(10, -45)          -50
+
+=item C<round_each>:  Round the value to the nearest increment of this value on each iteration.
+
+It is probably best to round at the end (C<round_final>) to keep precision
+during each iteration, but the option is available in case you wish to
+use it.
 
 =item C<perturb_scale>:  Scale parameter before being evaluated by simplex (per index for vectors)
 
