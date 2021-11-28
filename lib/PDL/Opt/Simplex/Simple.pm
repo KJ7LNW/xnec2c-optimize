@@ -193,8 +193,8 @@ sub _optimize
 
 	$result = $self->_expanded_to_original($result);
 
-	# Round final values if any vars have round_final defined:
-	_vars_round_final($result);
+	# Round final values if any vars have round_result defined:
+	_vars_round_result($result);
 
 	# Store the result in the user's format:
 	$self->{result} = $result;
@@ -296,7 +296,7 @@ sub _simple_to_expanded
 {
 	my ($vars) = @_;
 
-	my %valid_opts = map { $_ => 1 } qw/values enabled minmax perturb_scale round_each round_final/;
+	my %valid_opts = map { $_ => 1 } qw/values enabled minmax perturb_scale round_each round_result/;
 
 	my %exp;
 	foreach my $var_name (keys(%$vars))
@@ -388,9 +388,9 @@ sub _simple_to_expanded
 			$var->{round_each} = [ map { $var->{round_each} } (1..$n) ] 
 		}
 
-		if (defined($var->{round_final}) && !ref($var->{round_final}))
+		if (defined($var->{round_result}) && !ref($var->{round_result}))
 		{
-			$var->{round_final} = [ map { $var->{round_final} } (1..$n) ] 
+			$var->{round_result} = [ map { $var->{round_result} } (1..$n) ] 
 		}
 
 		# Sanity checks
@@ -509,7 +509,7 @@ sub _expanded_to_original
 				$newvar->{values} = $exp->{$var_name}->{values}->[0];
 			}
 
-			foreach my $opt (qw/enabled minmax perturb_scale round_each round_final/)
+			foreach my $opt (qw/enabled minmax perturb_scale round_each round_result/)
 			{
 				$newvar->{$opt} = $origvar->{$opt} if exists($origvar->{$opt});
 			}
@@ -521,34 +521,34 @@ sub _expanded_to_original
 	return \%result;
 }
 
-# Use the round_final attribute of each var (if defined) to round
+# Use the round_result attribute of each var (if defined) to round
 # the var to its nearest value.  $vars must be in expanded format.
-sub _vars_round_final
+sub _vars_round_result
 {
 	my ($vars) = @_;
 
 	foreach my $var (values(%$vars))
 	{
-		my @round_final;
+		my @round_result;
 
-		next unless defined $var->{round_final};
+		next unless defined $var->{round_result};
 
 		my $n = @{ $var->{values} };
 
-		# use temp var @round_final so we don't mess with the $vars structure.
-		if (!ref($var->{round_final}))
+		# use temp var @round_result so we don't mess with the $vars structure.
+		if (!ref($var->{round_result}))
 		{
-			@round_final = map { $var->{round_final} } (1..$n);
+			@round_result = map { $var->{round_result} } (1..$n);
 		}
 		else 
 		{
-			@round_final = @{ $var->{round_final} };
+			@round_result = @{ $var->{round_result} };
 		}
 
 		# Round to a precision if defined:
 		foreach (my $i = 0; $i < $n; $i++)
 		{
-			$var->{values}->[$i] = nearest($round_final[$i], $var->{values}->[$i]);
+			$var->{values}->[$i] = nearest($round_result[$i], $var->{values}->[$i]);
 		}
 	}
 
@@ -813,10 +813,10 @@ Expanded format:
 
 Min-max pairs are clamped before being evaluated by simplex.
 
-=item C<round_final>:  Round the value to the nearest increment of this value upon completion
+=item C<round_result>:  Round the value to the nearest increment of this value upon completion
 
 You may need to round the final output values to a real-world limit after optimization
-is complete.  Setting round_final will round after optimization finishes, but leave 
+is complete.  Setting round_result will round after optimization finishes, but leave 
 full precision while iterating.  See also: C<round_each>.
 
 This funciton uses L<Math::Round>'s C<nearest> function:
@@ -830,7 +830,7 @@ This funciton uses L<Math::Round>'s C<nearest> function:
 
 =item C<round_each>:  Round the value to the nearest increment of this value on each iteration.
 
-It is probably best to round at the end (C<round_final>) to keep precision
+It is probably best to round at the end (C<round_result>) to keep precision
 during each iteration, but the option is available in case you wish to
 use it.
 
