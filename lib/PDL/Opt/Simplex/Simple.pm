@@ -14,9 +14,10 @@ sub new
 
 	my $self = bless(\%args, $class);
 
-	$self->{tolerance}  //=  1e-6;
-	$self->{max_iter}   //=  1000;
-	$self->{ssize}      //=  0.1;
+	$self->{tolerance}              //=  1e-6;
+	$self->{max_iter}               //=  1000;
+	$self->{ssize}                  //=  0.1;
+	$self->{stagnant_minima_count}  //=  30;
 	
 	if ($self->{srand})
 	{
@@ -49,6 +50,12 @@ sub optimize
 {
 	my $self = shift;
 
+	$self->{optimization_pass} = 1;
+	$self->{log_count} = 0;
+
+	delete $self->{best_minima};
+	delete $self->{best_vec};
+
 	if (@{ $self->{_ssize} } == 1)
 	{
 		return $self->_optimize;
@@ -60,6 +67,8 @@ sub optimize
 		$self->set_ssize($ssize);
 		$result = $self->_optimize;
 		$self->set_vars($result);
+		$self->{optimization_pass}++;
+		$self->{log_count} = 0;
 	}
 
 	return $result;
@@ -71,6 +80,11 @@ sub _optimize
 
 	my $vec_initial = $self->_build_simplex_vars();
 
+	$self->{cancel} = 0;
+
+	delete $self->{prev_minima};
+	delete $self->{prev_minima_count};
+
 	my ( $vec_optimal, $opt_ssize, $optval ) = simplex($vec_initial,
 		$self->{ssize},
 		$self->{tolerance},
@@ -80,16 +94,31 @@ sub _optimize
 		# based on the content of $self->{vars}:
 		sub {
 			my ($vec) = @_;
+			my $ret = $vec->slice("(0)");
+
+			if ($self->{cancel})
+			{
+				$ret *= 0;
+				$ret += -1e9;
+				return $ret;
+			}
 
 			# Call the user's function and pass their vars.
 			# $f_ret is the resulting weight:
 			my $f_ret = $self->{f}->($self->_get_simplex_vars($vec));
 
+			if (!defined($self->{best_minima}) || $f_ret < $self->{best_minima})
+			{
+				$self->{best_minima} = $f_ret;
+				$self->{best_vec} = $vec;
+				$self->{best_pass} = $self->{optimization_pass};
+			}
+
 			# Whatever vector format $vec->slice("(0)") is, so $ret must be also.
 			# So slice it, multiply times zero, and then add the result from f() above. 
-			my $ret = $vec->slice("(0)");
 			$ret *= 0;
 			$ret += $f_ret;
+
 
 			return $ret;
 		},
@@ -110,10 +139,39 @@ sub _optimize
 			}
 			$self->{prev_time} = time();
 
+			$self->{log_count}++;
 
 			my $minima = $vec->slice("(0)", 0)->sclr;
-			$self->{log}->($self->_get_simplex_vars($vec), 
-				{ ssize => $ssize, minima => $minima, elapsed => $elapsed, srand => $self->{srand} });
+
+			# Cancel early if stagnated:
+			if (defined($self->{prev_minima}) && $self->{prev_minima} <= $minima)
+			{
+				$self->{prev_minima_count}++;
+				if ($self->{prev_minima_count} > $self->{stagnant_minima_count})
+				{
+					$self->{cancel} = 1;
+				}
+			}
+			elsif (!$self->{cancel})
+			{
+				$self->{prev_minima} = $minima;
+				$self->{prev_minima_count} = 0;
+			}
+
+
+			$self->{log}->($self->_get_simplex_vars($vec), {
+				ssize => $ssize,
+				minima => $minima,
+				elapsed => $elapsed,
+				srand => $self->{srand},
+				optimization_pass => $self->{optimization_pass},
+
+				num_passes => scalar( @{ $self->{_ssize} }),
+				best_pass => $self->{best_pass},
+				log_count => $self->{log_count},
+				cancel => $self->{cancel},
+				prev_minima_count => $self->{prev_minima_count}
+				});
 		}
 	);
 
@@ -125,8 +183,9 @@ sub _optimize
 	# passed to new(vars => {...}) so it matches what the user
 	# is expecting by converting it from simple to expanded
 	# and finally to original:
-	
-	my $result = $self->_get_simplex_vars($vec_optimal);
+
+	my $result = $self->_get_simplex_vars($self->{best_vec});
+	#my $result = $self->_get_simplex_vars($vec_optimal);
 
 	$result = _simple_to_expanded($result);
 	$result = $self->_expanded_to_original($result);
@@ -777,12 +836,19 @@ same format as the C<f> callback.  A second C<$state> argument is passed
 with information about the The return value is ignored.  The following 
 values are available in the C<$state> hashref:
 
-	{
-		'ssize' => '704.187123721893',  # current ssize during iteration
-		'minima' => '53.2690700664067', # current minima returned by f()
-		'elapsed' => '3.12',            # elapsed time in seconds since last log() call.
-		'srand' => 55294712             # the random seed for this run
-	}
+    {
+	'ssize' => '704.187123721893',  # current ssize during iteration
+	'minima' => '53.2690700664067', # current minima returned by f()
+	'elapsed' => '3.12',            # elapsed time in seconds since last log() call.
+	'srand' => 55294712,            # the random seed for this run
+	'log_count' => 5,               # how many times _log has been called
+	'optimization_pass' => 3,       # pass# if multiple ssizes are used
+	'num_passes' => 6,              # total number of passes
+	'best_pass' =>  3,              # the pass# that had the best goal result
+	'log_count' => 22,              # number of times log has been called
+	'prev_minima_count' => 10,      # number of same minima's in a row
+	'cancel' =>     0               # true if the simplex iteration is being cancelled
+    }
 
 
 =head2 * C<ssize> - Initial simplex size, see L<PDL::Opt::Simplex>
@@ -800,7 +866,7 @@ Example for optimizing geometry in an EM simulation: Because it is
 proportional to wavelength, lower frequencies need a larger value and
 higher frequencies need a lower value.
 
-The C<ssize> parameter may be an arrayref.  If an arrayref is specified
+The C<ssize> parameter may be an arrayref:  If an arrayref is specified
 then it will run simplex to completion using the first ssize and then
 restart with the next C<ssize> value in the array.  Each iteration uses
 the best result as the input to the next simplex iteration in an attempt
@@ -835,8 +901,18 @@ a randomly generated seed.  If set, it will call srand($self->{srand})
 to initialize the initial seed.  The result of this seed (whether passed
 or generated) is available in the status structure defined above.
 
-Default: 1e-6
+Default: system generated.
 
+=head2 * C<stagnant_minima_count> - Abort the simplex iteration if the minima is not changing
+
+This is the maximum number of iterations that can return a worse minima
+than the previous minima. Once reaching this limit the current iteration
+is cancelled due to stagnation.  This value may be somewhat dependent
+on the number of variables you are optimizing.  The more variables, the
+bigger the value.  A value of 30 seems to work well for 10 variables,
+so adjust if necessary.
+
+Default: 30
 
 =head1 SEE ALSO
 

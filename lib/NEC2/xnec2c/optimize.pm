@@ -54,8 +54,6 @@ sub optimize
 {
 	my $self = shift;
 
-	$self->{log_count} = 0;
-
 	$self->{simplex}->optimize();
 
 	return $self->{simplex}->get_result_expanded();
@@ -73,6 +71,8 @@ sub print_vars_result
 {
 	my $self = shift;
 	print "===== Result ==== \n";
+
+	print "srand: $self->{simplex}->{'srand'}\n";
 
 	print Dumper($self->{simplex}->get_result_simple) . "\n";
 }
@@ -136,17 +136,21 @@ sub _log
 	my $minima = $status->{minima};
 	my $ssize = $status->{ssize};
 
-	$self->{log_count}++;
-
-	print Dumper($vars, $self->{goal_status});
 	$status->{elapsed} //= -1;
+	
+	if (!$status->{cancel})
+	{
+		print Dumper($vars, $self->{goal_status}) . "\n\n";
+	}
 
-	printf "\n\nLOG %d/%d [%.2f s]: %.6f > %g (srand=%d), goal minima = %.6f\n",
-		$self->{log_count}, $self->{simplex}->{max_iter},
+	printf "%s %.2fs pass #%d/%d (best=%d): %d/%d  %.3g > %.3g, minima=%.3g (%d/%d retries)\n",
+		$status->{cancel} ? 'CANCEL' : 'LOG',
 		$status->{elapsed},
+		$status->{optimization_pass}, $status->{num_passes}, $status->{best_pass},
+		$status->{log_count}, $self->{simplex}->{max_iter},
 		$ssize, $self->{simplex}->{tolerance},
-		$self->{simplex}->{'srand'},
-		$minima;
+		$minima,
+		$status->{prev_minima_count}, $self->{simplex}->{stagnant_minima_count};
 }
 
 sub _load_csv
@@ -216,23 +220,30 @@ sub _goal_eval_mhz
 
 	# Sum the goal function and return the result:
 	my $n = nelem($p);
-	my $sum = 0;
-	my $mag = 0;
-	my $avg = 0;
+	my $sum = pdl 0;
+	my $mag = pdl 0;
+	my $avg = pdl 0;
 	my $min;
 	my $max;
 	for ($i = 0; $i < $n; $i++)
 	{
-		my $v = $goal->{result}->($p->slice("($i)"), $mhz->slice("($i)")); 
+		my $pval = $p->slice("($i)");
+		my $mhzval = $mhz->slice("($i)");
+		my $v = $goal->{result}->($pval, $mhzval); 
 
-		if ($v eq pdl(['inf']))
+		if ($v == pdl(['inf']) || "$v" eq 'inf')
 		{
-			warn "result($goal->{field}) at index $i is infinite, using 1e6";
+			warn "result($goal->{field}) at $mhzval MHz (index $i) is +inf, using 1e6";
 			$v = pdl 1e6;
 		}
-		if ($v eq pdl(['nan']) || $v eq pdl(['-nan']))
+		elsif ($v == pdl(['-inf']) || "$v" eq '-inf')
 		{
-			warn "result($goal->{field}) at index $i is NaN, skipping";
+			warn "result($goal->{field}) at $mhzval MHz (index $i) is -inf, using -1e6";
+			$v = pdl -1e6;
+		}
+		elsif ($v == pdl(['nan']) || $v == pdl(['-nan']) || "$v" eq 'nan' || "$v" eq '-nan')
+		{
+			warn "result($goal->{field}) at $mhzval MHz (index $i) is NaN, skipping";
 			next;
 		}
 
@@ -288,7 +299,6 @@ sub _goal_eval_all
 		if (!defined($g->{field}))
 		{
 			my $v = $g->{result}->($vars, $csv); 
-			print "Goal $g->{name} is $v\n";
 			$ret += $v * $g->{weight};
 			next;
 		}
