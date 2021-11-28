@@ -2,7 +2,7 @@ package NEC2::Antenna::Yagi;
 
 use NEC2;
 
-#use parent 'NEC2::Antenna';
+use parent 'NEC2::Antenna';
 
 use strict;
 use warnings;

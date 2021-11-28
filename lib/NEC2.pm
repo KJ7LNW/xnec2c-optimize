@@ -37,6 +37,10 @@ require NEC2::Polyline;
 BEGIN {
 	our @ISA = qw(Exporter);
 	our @EXPORT = (
+
+		# Comment cards
+		qw/CM CE/,
+
 		# Geo card functions
 		qw/GA GE GF GH GM GR GS GW GC GX SP SM/,
 
@@ -70,6 +74,7 @@ sub add
 
 	foreach my $card (@cards)
 	{
+		push @{ $self->{comment_cards} }, $card->comment_cards();
 		push @{ $self->{geo_cards} }, $card->geo_cards();
 		push @{ $self->{program_cards} }, $card->program_cards();
 	}
@@ -77,6 +82,12 @@ sub add
 	return $self;
 }
 
+
+sub comment_cards
+{
+	my $self = shift;
+	return @{ $self->{comment_cards} };
+}
 
 sub geo_cards
 {
@@ -135,7 +146,16 @@ sub stringify
 
 	my $ret = '';
 
-	$ret .= CM(comment => $self->{comment});
+	if (defined($self->{comment}) && ref($self->{comment}) eq 'ARRAY')
+	{
+		$ret .= CM(comment => $_) foreach (@{ $self->{comment} });
+	}
+	else {
+		$ret .= CM(comment => $self->{comment});
+	}
+
+	$ret .= $_ foreach ($self->comment_cards);
+
 	$ret .= CE();
 	
 	# always put the GE card at the end of the geometry.  Default to freespace GE if
@@ -164,7 +184,7 @@ sub save
 
 	$fn or die "invalid filename: $fn";
 
-	open(my $structure, "|column -t > $fn") or die "$!: $fn";
+	open(my $structure, ">", $fn) or die "$!: $fn";
 
 	print $structure $self;
 	close($structure);
@@ -178,8 +198,8 @@ sub save
 # Card shortcuts:
 
 # Comment cards
-sub CM { return NEC2::Card::CM->new(@_) }  # Arc
-sub CE { return NEC2::Card::CE->new(@_) }  # Arc
+sub CM { return NEC2::Card::CM->new(@_) }  # Comment
+sub CE { return NEC2::Card::CE->new(@_) }  # Comment End
 
 # Geo cards
 sub GA { return NEC2::Card::GA->new(@_) }  # Arc

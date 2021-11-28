@@ -112,6 +112,15 @@ sub program_cards
 	return ();
 }
 
+sub comment_cards
+{
+	my $self = shift;
+
+	return $self if ($self->is_comment_card());
+	return ();
+}
+
+
 
 # Override this if the card name doesn't take the format of
 # NEC2::(CARDNAME) from the class
@@ -279,6 +288,13 @@ sub is_program_card
 	my $card_name = $self->card_name;
 	return scalar(grep { $_ eq $card_name } program_card_names());
 }
+
+sub is_comment_card
+{
+	my $self = shift;
+	return $self->card_name eq 'CM';
+}
+
 
 sub is_card
 {
