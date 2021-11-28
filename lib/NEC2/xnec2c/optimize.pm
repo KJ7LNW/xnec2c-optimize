@@ -251,12 +251,12 @@ sub _goal_eval_mhz
 
 		if ($v == pdl(['inf']) || "$v" eq 'inf')
 		{
-			warn "result($goal->{field}) at $mhzval MHz (index $i) is +inf, using 1e6";
+			#warn "result($goal->{field}) at $mhzval MHz (index $i) is +inf, using 1e6";
 			$v = pdl 1e6;
 		}
 		elsif ($v == pdl(['-inf']) || "$v" eq '-inf')
 		{
-			warn "result($goal->{field}) at $mhzval MHz (index $i) is -inf, using -1e6";
+			#warn "result($goal->{field}) at $mhzval MHz (index $i) is -inf, using -1e6";
 			$v = pdl -1e6;
 		}
 		elsif ($v == pdl(['nan']) || $v == pdl(['-nan']) || "$v" eq 'nan' || "$v" eq '-nan')

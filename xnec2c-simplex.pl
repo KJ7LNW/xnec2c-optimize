@@ -57,6 +57,8 @@ $xnec2c->optimize();
 
 print "\n===== Done! ==== \n";
 
+
+$xnec2c->print_goal_status;
 $xnec2c->print_vars_result();
 
 print "\n===== $filename_nec ==== \n";

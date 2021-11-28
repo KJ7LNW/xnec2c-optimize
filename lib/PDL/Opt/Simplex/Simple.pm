@@ -186,7 +186,11 @@ sub _optimize
 	# is expecting by converting it from simple to expanded
 	# and finally to original:
 
+
+	# Using {best_vec} might end up using a value from a previous
+	# pass, completely disregarding the current pass.  Is this ok?
 	my $result = $self->_get_simplex_vars($self->{best_vec});
+
 	#my $result = $self->_get_simplex_vars($vec_optimal);
 
 	$result = _simple_to_expanded($result);
@@ -819,7 +823,7 @@ You may need to round the final output values to a real-world limit after optimi
 is complete.  Setting round_result will round after optimization finishes, but leave 
 full precision while iterating.  See also: C<round_each>.
 
-This funciton uses L<Math::Round>'s C<nearest> function:
+This function uses L<Math::Round>'s C<nearest> function:
 
 	nearest(10, 44)    yields  40
 	nearest(10, 46)            50
@@ -989,10 +993,13 @@ Default: system generated.
 
 This is the maximum number of iterations that can return a worse minima
 than the previous minima. Once reaching this limit the current iteration
-is cancelled due to stagnation.  This value may be somewhat dependent
-on the number of variables you are optimizing.  The more variables, the
-bigger the value.  A value of 30 seems to work well for 10 variables,
-so adjust if necessary.
+is cancelled due to stagnation. Setting this too low will provide poor
+results, setting it too high will just take longer to iterate when it
+gets stuck.
+
+Note: This value may be somewhat dependent on the number of variables
+you are optimizing.  The more variables, the bigger the value.  A value
+of 30 seems to work well for 10 variables, so adjust if necessary.
 
 Default: 30
 
