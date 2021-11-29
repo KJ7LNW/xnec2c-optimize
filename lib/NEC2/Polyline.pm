@@ -1,9 +1,12 @@
 package NEC2::Polyline;
 
+use parent 'NEC2::Shape';
+
 use strict;
 use warnings;
 
 use NEC2;
+
 
 sub defaults
 {
