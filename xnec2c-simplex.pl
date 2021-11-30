@@ -5,6 +5,8 @@ use warnings;
 
 use lib 'lib';
 
+use POSIX;
+
 use NEC2;
 use NEC2::xnec2c::optimize;
 use NEC2::Antenna::Yagi;
@@ -23,14 +25,29 @@ if (!@ARGV)
 my $filename_config = $ARGV[0];
 my $filename_nec = $ARGV[0];
 my $filename_nec_csv = $ARGV[0];
+my $filename_save = $ARGV[0];
 
 $filename_nec =~ s/\.conf$//;
 $filename_nec .= ".nec";
+
+$filename_save =~ s/\.conf$//;
+$filename_save = strftime("%F_%H-%M-%S_", localtime) . $filename_save . ".save";
 
 die "file not found: $filename_config" if (! -e $filename_config);
 
 my $config = do($filename_config);
 die $@ if $@;
+
+if ($ARGV[1])
+{
+	my $load = do($ARGV[1]);
+	die $@ if $@;
+	foreach my $var (keys(%$load))
+	{
+		$config->{vars}{$var}{values} = $load->{$var};
+	}
+}
+
 
 my $xnec2c = NEC2::xnec2c::optimize->new(
 	filename_nec => $filename_nec, 
@@ -53,7 +70,18 @@ print "\nPress enter to start\n";
 print "\n===== Starting Optimization ==== \n";
 
 
-$xnec2c->optimize();
+my $result = $xnec2c->optimize();
+
+if (open(my $save, ">", $filename_save))
+{
+	print $save Dumper($result);
+	close($save);
+	print "Saved state to $filename_save\n";
+}
+else
+{
+	warn "$filename_save: $!";
+}
 
 print "\n===== Done! ==== \n";
 
