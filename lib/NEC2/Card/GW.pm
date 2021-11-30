@@ -96,4 +96,14 @@ sub set_special
 	return 0;
 }
 
+sub get_points
+{
+	my $self = shift;
+	return (
+		[ $self->get_card_var('x1'), $self->get_card_var('y1'), $self->get_card_var('z1')],
+
+		[ $self->get_card_var('x2'), $self->get_card_var('y2'), $self->get_card_var('z2') ]
+	);
+}
+
 1;
