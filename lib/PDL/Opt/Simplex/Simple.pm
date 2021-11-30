@@ -146,7 +146,7 @@ sub _optimize
 			my $minima = $vec->slice("(0)", 0)->sclr;
 
 			# Cancel early if stagnated:
-			if (defined($self->{prev_minima}) && $self->{prev_minima} <= $minima)
+			if (defined($self->{prev_minima}) && abs($self->{prev_minima} - $minima) < 1e-6)
 			{
 				$self->{prev_minima_count}++;
 				if ($self->{prev_minima_count} > $self->{stagnant_minima_count})
@@ -335,11 +335,11 @@ sub _simple_to_expanded
 		}
 		else
 		{
-			die "invalid type for $var: " . ref($var);
+			die "invalid type for $var_name: " . ref($var);
 		}
 
 		# Make sure values is valid:
-		if (!defined($var->{values}) || !$var->{values} ||
+		if (!defined($var->{values}) ||
 			(ref($var->{values}) eq 'ARRAY' && !@{$var->{values}}))
 		{
 			die "$var_name\-\>{values} must be defined"
@@ -400,19 +400,19 @@ sub _simple_to_expanded
 		# Sanity checks
 		if (defined($var->{enabled}) && $n != scalar(@{ $var->{enabled} }))
 		{
-			die "variable $var must have the same length array for 'values' as for 'enabled'"
+			die "variable $var_name must have the same length array for 'values' as for 'enabled'"
 		}
 
 		if (defined($var->{perturb_scale}) && $n != scalar(@{ $var->{perturb_scale} }))
 		{
-			die "variable $var must have the same length array for 'values' as for 'perturb_scale'"
+			die "variable $var_name must have the same length array for 'values' as for 'perturb_scale'"
 		}
 
 		if (defined($var->{minmax}))
 		{
 			if ($n != scalar(@{ $var->{minmax} }))
 			{
-				die "variable $var must have the same length array for 'values' as for 'minmax'"
+				die "variable $var_name must have the same length array for 'values' as for 'minmax'"
 			}
 
 			for (my $i = 0; $i < $n; $i++)
@@ -535,6 +535,7 @@ sub _vars_round_result
 	{
 		my @round_result;
 
+		next if !ref($var); 
 		next unless defined $var->{round_result};
 
 		my $n = @{ $var->{values} };
