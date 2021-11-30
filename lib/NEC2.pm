@@ -139,12 +139,46 @@ sub program_card_filter
 	return $self->card_filter($card, $self->program_cards());
 }
 
+
+# True if $a >= $b within $tolerance
+sub approx_greater
+{
+	my ($a, $b, $tolerance) = @_;
+
+	$tolerance //= 1e-6;
+
+	return ($a-$b) > -$tolerance;
+}
+
+# True if $a <= $b within $tolerance
+sub approx_lesser
+{
+	my ($a, $b, $tolerance) = @_;
+
+	$tolerance //= 1e-6;
+
+	return ($b-$a) > -$tolerance;
+}
+
+# True if $a == $b within $tolerance
+sub approx_equal
+{
+	my ($a, $b, $tolerance) = @_;
+
+	$tolerance //= 1e-6;
+
+	return abs($a-$b) < $tolerance;
+}
+
+
 # Returns shortest line: [ [x1,y1,z1], [x2,y2,z2], distance ].  
 # If askew lines cross (or nearly-intersect) then xyz1 and xyz2 are undefined
 # and only distance is returned.
 #
 # Thank you to @Fnord: https://stackoverflow.com/a/18994296/14055985
-sub lines_intersect
+#
+# 1e-6 is used to adjust for floating point error.
+sub line_intersect
 {
 	# Map @_ as vectors:
 	my ($a0, $a1, $b0, $b1) = map { V(@{ $_ }) } @_;
@@ -170,16 +204,17 @@ sub lines_intersect
 	# If lines are parallel (denom=0) test if lines overlap.
 	# If they don't overlap then there is a closest point solution.
 	# If they do overlap, there are infinite closest positions, but there is a closest distance
-	if ($denom > -1e-6 && $denom < 1e-6) # $denom == 0
 	#if ($denom == 0)
+	if (approx_equal($denom, 0))
 	{
 		my $d0 = $_A * ($b0-$a0);
 		my $d1 = $_A * ($b1-$a0);
 
 		# Is segment B before A?
-		if ($d0 <= 1e-6 && -1e-6 >= $d1)
+		#if ($d0 <= 0 && 0 >= $d1)
+		if (approx_lesser($d0, 0) && approx_greater(0, $d1))
 		{
-			if (abs($d0) < abs($d1)+1e-6)
+			if (abs($d0) < abs($d1))
 			{
 				return V($a0, $b0, abs($a0-$b0));
 			}
@@ -189,7 +224,8 @@ sub lines_intersect
 			}
 		}
 		# Is segment B after A?
-		elsif ($d0+1e-6 >= $magA && $magA <= $d1+1e-6)
+		#elsif ($d0 >= $magA && $magA <= $d1)
+		elsif (approx_greater($d0, $magA) && approx_lesser($magA, $d1))
 		{
 			if (abs($d0) < abs($d1))
 			{
@@ -224,26 +260,26 @@ sub lines_intersect
 		my $pA = $a0 + ($_A * $t0); # Projected closest point on segment A
 		my $pB = $b0 + ($_B * $t1); # Projected closest point on segment A
 
-		if ($t0 < 0+1e-6)
+		if ($t0 < 0)
 		{
 			$pA = $a0;
 		}
-		elsif ($t0+1e-6 > $magA)
+		elsif ($t0 > $magA)
 		{
 			$pA = $a1;
 		}
 
-		if ($t1 < 0+1e-6)
+		if ($t1 < 0)
 		{
 			$pB = $b0;
 		}
-		elsif ($t1+1e-6 > $magB)
+		elsif ($t1 > $magB)
 		{
 			$pB = $b1;
 		}
 
 		# Clamp projection A
-		if ($t0 < 0+1e-6 || $t0+1e-6 > $magA)
+		if ($t0 < 0 || $t0 > $magA)
 		{
 			my $dot = $_B * ($pA-$b0);
 			if ($dot < 0)
@@ -259,14 +295,14 @@ sub lines_intersect
 		}
 		
 		# Clamp projection B
-		if ($t1 < 0+1e-6 || $t1+1e-6 > $magB)
+		if ($t1 < 0 || $t1 > $magB)
 		{
 			my $dot = $_A * ($pB-$a0);
-			if ($dot < 0+1e-6)
+			if ($dot < 0)
 			{
 				$dot = 0;
 			}
-			elsif ($dot+1e-6 > $magA)
+			elsif ($dot > $magA)
 			{
 				$dot = $magA;
 			}
@@ -283,64 +319,66 @@ sub test_gw_intersections
 	my ($self) = @_;
 
 =pod
-	print "sample:" . lines_intersect(
-		GW(points  =>  [[ 0, 0, 0.955 ],  [ -0.20125, 0, 0.995 ]]),
-		GW(points  =>  [[ -0.20125, 0, 0.995 ],  [ -0.27125, 0, 0.995 ]]))  .  "\n"  ;
-	#exit;
 	# validation:
-	print "example: " . lines_intersect(
-		GW(points  =>  [[13.43,  21.77,  46.81  ],  [27.83,  31.74,  -26.60  ]]),
-		GW(points  =>  [[77.54,  7.53,   6.22   ],  [26.99,  12.39,  11.18   ]]))  .  "\n"  ;
-
-	print "contiguous: " . lines_intersect(
-		GW(points  =>  [[0, 0, 0  ],  [ 0, 0, 1  ]]),
-		GW(points  =>  [[0, 0, 1  ],  [ 0, 0, 2  ]]),
+	print "sample: " . line_intersect(
+		[ '-13.203', 0, '17.39' ], [ '-25.3685', 0, '17.39' ],
+		[ 0, 0, '17.39' ], [ '-13.203', 0, '17.39' ]
 		)  .  "\n"  ;
 
-	print "contiguous 90: " . lines_intersect(
-		GW(points  =>  [[0, 0, 0  ],  [ 0, 0, 1  ]]),
-		GW(points  =>  [[0, 0, 1  ],  [ 0, 1, 1  ]]),
+	print "example: " . line_intersect(
+		[13.43,  21.77,  46.81  ],  [27.83,  31.74,  -26.60  ],
+		[77.54,  7.53,   6.22   ],  [26.99,  12.39,  11.18   ])  .  "\n"  ;
+
+	print "contiguous: " . line_intersect(
+		[0, 0, 0  ],  [ 0, 0, 1  ],
+		[0, 0, 1  ],  [ 0, 0, 2  ],
 		)  .  "\n"  ;
 
-	print "colinear separate: " . lines_intersect(
-		GW(points  =>  [[0, 0, 0  ],  [ 0, 0, 1  ]]),
-		GW(points  =>  [[0, 0, 2  ],  [ 0, 0, 3  ]]),
+	print "contiguous 90: " . line_intersect(
+		[0, 0, 0  ],  [ 0, 0, 1  ],
+		[0, 0, 1  ],  [ 0, 1, 1  ],
 		)  .  "\n"  ;
 
-	print "cross: " . lines_intersect(
-		GW(points  =>  [[1, 1, 0  ],  [ -1, -1, 0  ]]),
-		GW(points  =>  [[-1, 1, 0  ],  [ 1, -1, 0  ]]),
+	print "colinear separate: " . line_intersect(
+		[0, 0, 0  ],  [ 0, 0, 1  ],
+		[0, 0, 2  ],  [ 0, 0, 3  ],
 		)  .  "\n"  ;
 
-	print "cross+z: " . lines_intersect(
-		GW(points  =>  [[1, 1, 0  ],  [ -1, -1, 0  ]]),
-		GW(points  =>  [[-1, 1, 1  ],  [ 1, -1, 1  ]]),
+	print "cross: " . line_intersect(
+		[1, 1, 0  ],  [ -1, -1, 0  ],
+		[-1, 1, 0  ],  [ 1, -1, 0  ],
 		)  .  "\n"  ;
 
-	print "full overlap1: " . lines_intersect(
-		GW(points  =>  [[2, 0, 0  ],  [ 5, 0, 0  ]]),
-		GW(points  =>  [[3, 0, 0  ],  [ 4, 0, 0  ]]),
+	print "cross+z: " . line_intersect(
+		[1, 1, 0  ],  [ -1, -1, 0  ],
+		[-1, 1, 1  ],  [ 1, -1, 1  ],
 		)  .  "\n"  ;
 
-	print "full overlap2: " . lines_intersect(
-		GW(points  =>  [[3, 0, 0  ],  [ 4, 0, 0  ]]),
-		GW(points  =>  [[2, 0, 0  ],  [ 5, 0, 0  ]]),
+	print "full overlap1: " . line_intersect(
+		[2, 0, 0  ],  [ 5, 0, 0  ],
+		[3, 0, 0  ],  [ 4, 0, 0  ],
 		)  .  "\n"  ;
 
-	print "partial overlap1: " . lines_intersect(
-		GW(points  =>  [[2, 0, 0  ],  [ 5, 0, 0  ]]),
-		GW(points  =>  [[3, 0, 0  ],  [ 6, 0, 0  ]]),
+	print "full overlap2: " . line_intersect(
+		[3, 0, 0  ],  [ 4, 0, 0  ],
+		[2, 0, 0  ],  [ 5, 0, 0  ],
 		)  .  "\n"  ;
 
-	print "partial overlap2: " . lines_intersect(
-		GW(points  =>  [[3, 0, 0  ],  [ 6, 0, 0  ]]),
-		GW(points  =>  [[2, 0, 0  ],  [ 5, 0, 0  ]]),
+	print "partial overlap1: " . line_intersect(
+		[2, 0, 0  ],  [ 5, 0, 0  ],
+		[3, 0, 0  ],  [ 6, 0, 0  ],
 		)  .  "\n"  ;
 
-	print "parallel: " . lines_intersect(
-		GW(points  =>  [[3, 0, 0  ],  [ 6, 0, 0  ]]),
-		GW(points  =>  [[3, 0, 1  ],  [ 6, 0, 1  ]]),
+	print "partial overlap2: " . line_intersect(
+		[3, 0, 0  ],  [ 6, 0, 0  ],
+		[2, 0, 0  ],  [ 5, 0, 0  ],
 		)  .  "\n"  ;
+
+	print "parallel: " . line_intersect(
+		[3, 0, 0  ],  [ 6, 0, 0  ],
+		[3, 0, 1  ],  [ 6, 0, 1  ],
+		)  .  "\n"  ;
+#exit;
 
 	# output:
 	#example: {{20.29994361624, 26.5264817954106, 11.7875999397098}, {26.99, 12.39, 11.18}, 15.6513944955904}
@@ -361,7 +399,6 @@ sub test_gw_intersections
 
 =cut
 
-#exit;
 	my @gw = $self->geo_card_filter('GW');
 	my @intersecting_cards;
 
@@ -377,14 +414,14 @@ sub test_gw_intersections
 			# Skip the GW of itself. FIXME: This breaks if the tags are the same!
 			next if $tag1 == $tag2;
 
-			my $inter = lines_intersect($A->get_points, $B->get_points);
+			my $inter = line_intersect($A->get_points, $B->get_points);
 			#print "inter[$tag1, $tag2]: $inter\n";
 
 			# Skip if they have a nontrivial distance:
 			next if $inter->[2] < -1e-6 || $inter->[2] > 1e-6;
 
 			# Skip if they are connected endpoints with a nearly-zero distance:
-			next if defined($inter->[0]) && defined($inter->[1]) && 
+			next if @{$inter->[0]} == 3 && @{$inter->[1]} == 3 && 
 				abs($inter->[0] - $inter->[1])<1e-6 && # approximately thsame point
 				-1e-6 < $inter->[2] && $inter->[2] < 1e-6;
 
