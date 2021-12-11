@@ -1,0 +1,12 @@
+#!/bin/bash 
+
+if [ "$1" = "" ] ; then
+	echo $0 'file1 [file2] ...'
+	exit 1;
+fi
+
+for i in `find "$@" -type f `;do
+	if ! grep -q Copyright $i; then
+		cat COPYING-HEADER $i >$i.new && mv $i.new $i
+	fi
+done
