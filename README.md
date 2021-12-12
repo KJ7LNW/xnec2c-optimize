@@ -43,7 +43,7 @@ xnec2c-optimize is an optimization framework to tune antenna geometries with
 ./xnec2c-simplex.pl examples/yagi.conf 
 ```
 
-and then open `xnec2c -j NN yagi.nec` where `NN` is the number of CPUs you
+and then open `xnec2c -j NN examples/yagi.nec` where `NN` is the number of CPUs you
 have available on your system. Select File->Optimizer Output. Optimization will then begin.
 
 -Eric, KJ7LNW
