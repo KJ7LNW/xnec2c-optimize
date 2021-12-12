@@ -29,13 +29,16 @@ sub param_map
 {
 	return {
 		
+		# used by SP, not SM:
 		ns    => 'i2',
 		shape => 'i2',
 
+		# used by SP and SM:
 		x3 =>  'f1',
 		y3 =>  'f2',
 		z3 =>  'f3',
 
+		# used by SP only:
 		x4 =>  'f4',
 		y4 =>  'f5',
 		z4 =>  'f6',

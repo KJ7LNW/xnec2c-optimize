@@ -98,5 +98,29 @@ sub geo_cards
 	return @cards;
 }
 
+sub get_special
+{
+	my ($self, $var) = @_;
+
+	if ($var =~ /^[xyz][34]$/)
+	{
+		return $self->{$var}
+	}
+
+	return undef;
+}
+
+sub set_special
+{
+	my ($self, $var, $val) = @_;
+
+	if ($var =~ /^[xyz][34]$/)
+	{
+		$self->{$var} = $val;
+		return 1;
+	}
+
+	return 0;
+}
 
 1;

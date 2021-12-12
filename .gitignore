@@ -1,3 +1,4 @@
-*.nec
+/*.nec
+/examples/yagi.nec
 *.csv
 *.sw?

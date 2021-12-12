@@ -22,6 +22,7 @@ package NEC2::Card::SM;
 use strict;
 use warnings;
 
+use NEC2::Card::SC;
 use parent 'NEC2::Card';
 
 
@@ -29,30 +30,47 @@ sub param_map
 {
 	return {
 
-		ns =>  'i2',
-		shape =>  'i2',
+		nx =>  'i1',
+		ny =>  'i2',
 
 		x1 =>  'f1',
 		y1 =>  'f2',
 		z1 =>  'f3',
 
 		x2 =>  'f4',
-		elevation =>  'f4',
-
 		y2 =>  'f5',
-		azimuth =>  'f5',
-
 		z2 =>  'f6',
-		area =>  'f6',
-
 	};
+}
+
+sub get_special
+{
+	my ($self, $var) = @_;
+
+	if ($var =~ /^[xyz]3$/)
+	{
+		return $self->{$var}
+	}
+
+	return undef;
+}
+
+sub set_special
+{
+	my ($self, $var, $val) = @_;
+
+	if ($var =~ /^[xyz]3$/)
+	{
+		$self->{$var} = $val;
+		return 1;
+	}
+
+	return 0;
 }
 
 sub geo_cards
 {
 	my $self = shift;
-
-	
 
 	return ($self, 
 		NEC2::Card::SC->new(
@@ -62,6 +80,5 @@ sub geo_cards
 			)
 		);
 }
-
 
 1;
