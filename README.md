@@ -28,20 +28,19 @@ xnec2c-optimize is an optimization framework to tune antenna geometries with
 2. Install the following perl modules with `cpanm` using these commands:
    - Ubuntu: `sudo apt install cpanminus build-essential`
    - CentOS: 
-   ```
-       yum install epel-release        # first enable epel
+       ```
        yum install perl-App-cpanminus
        yum groupinstall "Development tools"
-   ```
+       ```
+
 3. Install the dependencies with this command:
-`cpanm PDL PDL::IO::CSV Linux::Inotify2 Math::Round Time::HiRes`
+
+       cpanm PDL PDL::IO::CSV Linux::Inotify2 Math::Round Time::HiRes
 
 
 4. See `yagi.conf` for an example to get started.   Just run this:
 
-```sh
-./xnec2c-simplex.pl examples/yagi.conf 
-```
+       ./xnec2c-simplex.pl examples/yagi.conf 
 
 and then open `xnec2c -j NN examples/yagi.nec` where `NN` is the number of CPUs you
 have available on your system. Select File->Optimizer Output. Optimization will then begin.
