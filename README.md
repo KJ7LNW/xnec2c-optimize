@@ -16,8 +16,8 @@ xnec2c-optimize is an optimization framework to tune antenna geometries with
 ![before xnec2c-optimize](https://github.com/KJ7LNW/xnec2c-optimize/blob/master/examples/yagi-before-xnec2c-optimize.png?raw=true)
 
 ## After: 
-  - 10.2 - 10.7 dB gain.  
-  - 1.26 VSWR, hurray!  (Note that the graph scale changed)
+  - **10.81 - 11.3 dB gain!**
+  - **1.25 VSWR, hurray!**  (Note that the graph scale changed)
 ![after xnec2c-optimize](https://github.com/KJ7LNW/xnec2c-optimize/blob/master/examples/yagi-after-xnec2c-optimize.png?raw=true)
 
 # Getting Started
