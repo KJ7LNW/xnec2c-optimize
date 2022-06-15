@@ -180,14 +180,16 @@ sub _log
 		print "\n\n";
 	}
 
-	printf "%s %.2fs pass #%d/%d (best=%d): %d/%d  %.3g > %.3g, minima=%.3g (%d/%d retries)\n",
+	printf "%s %.2fs pass #%d/%d (best=%d): %d/%d  %.3g > %.3g, minima=%.3g (retries: %d/%d hit/miss: %d/%d)\n",
 		$status->{cancel} ? 'CANCEL' : 'LOG',
 		$status->{elapsed},
 		$status->{optimization_pass}, $status->{num_passes}, $status->{best_pass},
 		$status->{log_count}, $self->{simplex}->{max_iter},
 		$ssize, $self->{simplex}->{tolerance},
 		$minima,
-		$status->{prev_minima_count}, $self->{simplex}->{stagnant_minima_count};
+		$status->{prev_minima_count}, $self->{simplex}->{stagnant_minima_count},
+		$status->{cache_hits}//0, $status->{cache_misses}//0, 
+		;
 }
 
 sub _load_csv
@@ -197,6 +199,13 @@ sub _load_csv
 	(-e $fn) or die "CSV file is missing: $fn";
 
 	my @pdls = rcsv1D($fn, { header => 1 });
+
+	# Expected headers as of xnec2c v4.4.11:
+	my %headers = map { $_ => 1 } qw/
+		mhz zreal zimag zmag zphase vswr s11 s11_real s11_imag s11_ang
+		gain_max gain_net gain_max_theta gain_max_phi gain_viewer
+		gain_viewer_net fb_ratio/;
+
 
 	my %h;
 	foreach my $p (@pdls)
@@ -208,6 +217,12 @@ sub _load_csv
 			$h{$header} = $p 
 		}
 	}
+
+	foreach my $key (keys %headers)
+	{
+		warn "CSV: missing header: $key" if !defined($h{$key});
+	}
+
 
 	return \%h;
 }
@@ -226,9 +241,9 @@ sub _goal_eval_mhz
 	my $idx_min;
 	my $idx_max;
 	my $i = 0;
-	for ($i = 0; $i < nelem($csv->{'Freq-MHz'}); $i++)
+	for ($i = 0; $i < nelem($csv->{mhz}); $i++)
 	{
-		$mhz = $csv->{'Freq-MHz'}->slice("($i)");
+		$mhz = $csv->{mhz}->slice("($i)");
 		$idx_min = $i if ($mhz >= $mhz_min && !$idx_min);
 		$idx_max = $i if ($mhz <= $mhz_max);
 	}
@@ -252,7 +267,7 @@ sub _goal_eval_mhz
 	}
 
 	$p = $p->slice("$idx_min:$idx_max");
-	$mhz = $csv->{'Freq-MHz'}->slice("$idx_min:$idx_max");
+	$mhz = $csv->{mhz}->slice("$idx_min:$idx_max");
 
 
 	# Sum the goal function and return the result:
