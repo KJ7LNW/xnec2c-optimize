@@ -26,6 +26,7 @@ use Exporter;
 
 use Math::Vector::Real;
 use Math::Matrix;
+use IO::Handle;
 
 use NEC2::Card::CM;
 use NEC2::Card::EN;
@@ -512,9 +513,14 @@ sub save
 	}
 
 
+	# Write the outputfile.  The extra flushing is to get the data on disk
+	# before xnec2c opens the file when optimizing.  If it gets a partial
+	# copy it may crash.
 	open(my $structure, ">", $fn) or die "$!: $fn";
-
+	$structure->autoflush();
 	print $structure $self;
+	$structure->flush();
+	$structure->sync();
 	close($structure);
 }
 
