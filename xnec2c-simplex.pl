@@ -34,7 +34,7 @@ use NEC2::Antenna::Yagi;
 use Data::Dumper;
 
 #$SIG{__WARN__} = sub { print "\nWarning: $_[0]" . Dumper _build_stack() ; };
-$SIG{__DIE__} = sub { print "\nDie: $_[0]" . Dumper _build_stack() ; };
+$SIG{__DIE__} = sub { if ($^S) { die $_[0] }; print "\nDie: $_[0]" . Dumper _build_stack() ; };
 
 if (!@ARGV)
 {
