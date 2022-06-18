@@ -73,7 +73,11 @@ sub optimize
 {
 	my $self = shift;
 
-	$self->{simplex}->optimize();
+	my $result = $self->{simplex}->optimize();
+
+	# Call one more time to make sure the best result is rendered by xnec2c
+	# in case simplex's last iteration was worse than the best.
+	$self->_xnec2c_optimize_callback($self->{simplex}->get_result_simple());
 
 	return $self->{simplex}->get_result_expanded();
 }
