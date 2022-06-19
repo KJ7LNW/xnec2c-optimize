@@ -32,6 +32,7 @@ use NEC2::xnec2c::optimize;
 use NEC2::Antenna::Yagi;
 
 use Data::Dumper;
+$Data::Dumper::Sortkeys = 1;
 
 #$SIG{__WARN__} = sub { print "\nWarning: $_[0]" . Dumper _build_stack() ; };
 $SIG{__DIE__} = sub { if ($^S) { die $_[0] }; print "\nDie: $_[0]" . Dumper _build_stack() ; };
@@ -51,7 +52,7 @@ $filename_nec =~ s/\.conf$//;
 $filename_nec .= ".nec";
 
 $filename_save =~ s/\.conf$//;
-$filename_save = strftime("%F_%H-%M-%S_", localtime) . $filename_save . ".save";
+$filename_save =  $filename_save . strftime("-%F_%H-%M-%S.save", localtime);
 
 die "file not found: $filename_config" if (! -e $filename_config);
 
