@@ -35,7 +35,7 @@ xnec2c-optimize is an optimization framework to tune antenna geometries with
 
 3. Install the dependencies with this command:
 
-       cpanm PDL PDL::IO::CSV Linux::Inotify2 Math::Round Time::HiRes
+       cpanm PDL::Opt::Simplex::Simple PDL::IO::CSV Linux::Inotify2 Time::HiRes
 
 
 4. See `yagi.conf` for an example to get started.   Just run this:
