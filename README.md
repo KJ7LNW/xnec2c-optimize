@@ -43,6 +43,10 @@ xnec2c-optimize is an optimization framework to tune antenna geometries with
        ./xnec2c-simplex.pl examples/yagi.conf 
 
 and then open `xnec2c -j NN examples/yagi.nec` where `NN` is the number of CPUs you
-have available on your system. Select File->Optimizer Output. Optimization will then begin.
+have available on your system. 
+ - From the main window: select View->Frequency Plots
+   - From the Frequency Data Plots window: Enable a graph, like VSWR.  Configure whatever you would like to see during optimization.
+ - From the main window: select File->Optimizer Output. 
+ - Optimization will then begin!
 
 -Eric, KJ7LNW
