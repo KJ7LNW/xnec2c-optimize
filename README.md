@@ -23,7 +23,7 @@ xnec2c-optimize is an optimization framework to tune antenna geometries with
 # Getting Started
 
 1. Install the latest version of xnec2c from here: https://www.xnec2c.org/
-   - xnec2c v4.3 or later to work with external optimization.
+   - xnec2c v4.4.12 or later is recommended.
    
 2. Install the following perl modules with `cpanm` using these commands:
    - Ubuntu: `sudo apt install cpanminus build-essential`
@@ -46,7 +46,13 @@ and then open `xnec2c -j NN examples/yagi.nec` where `NN` is the number of CPUs 
 have available on your system. 
  - From the main window: select View->Frequency Plots
    - From the Frequency Data Plots window: Enable a graph, like VSWR.  Configure whatever you would like to see during optimization.
- - From the main window: select File->Optimizer Output. 
+   - Click the triangular "Play" button to run a frequency sweep. This setting must be active in order for the optimizer loop to function.
+ - From the main window: 
+   - Click "File->Optimization Settings->After calculation, write \<file\>.csv".
+   - Click "File->Optimization Settings->Reload and write data on .NEC file
+changes".
  - Optimization will then begin!
+
+See also: https://www.xnec2c.org/#Optimization
 
 -Eric, KJ7LNW
