@@ -35,12 +35,11 @@ xnec2c-optimize is an optimization framework to tune antenna geometries with
 
 3. Install the dependencies with this command:
 
-       cpanm PDL::Opt::Simplex::Simple PDL::IO::CSV Linux::Inotify2 Time::HiRes
-
+       cpanm PDL::Opt::Simplex::Simple PDL::IO::CSV Linux::Inotify2 Time::HiRes Math::Vector::Real Math::Matrix
 
 4. See `yagi.conf` for an example to get started.   Just run this:
 
-       ./xnec2c-simplex.pl examples/yagi.conf 
+       ./xnec2c-simplex.pl ./examples/yagi.conf
 
 and then open `xnec2c -j NN examples/yagi.nec` where `NN` is the number of CPUs you
 have available on your system. 
