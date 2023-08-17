@@ -26,6 +26,7 @@ use PDL;
 use PDL::IO::CSV qw(rcsv1D);
 use PDL::Opt::Simplex;
 use PDL::Opt::Simplex::Simple;
+use PDL::Opt::ParticleSwarm::Simple;
 
 use Linux::Inotify2;
 
@@ -57,15 +58,32 @@ sub new
 
 	}
 
-	$self->{simplex} = PDL::Opt::Simplex::Simple->new(
+	if (defined($self->{simplex}))
+	{
+		warn "deprecated: the section 'simplex' has been changed to 'optimizer' and requires a 'class' attribute.  Setting class='PDL::Opt::Simplex::Simple'";
+		$self->{optimizer} = delete $self->{simplex};
+		$self->{optimizer}{class} = 'PDL::Opt::Simplex::Simple';
+	}
+
+	$self->{_opt_class} //= delete $self->{optimizer}{class};
+
+	if (!defined($self->{_opt_class}))
+	{
+		die "You must define an optimizer class in your config as optimizer=>{class=>'CLASSNAME'}}";
+	}
+
+	my $oclass = $self->{_opt_class};
+
+
+	$self->{opt} = $oclass->new(
 		vars => $self->{vars},
 		f    =>  sub  {  $self->_xnec2c_optimize_callback(@_)  },
 		log  =>  sub  {  $self->_log(@_)                       },
-		%{ $self->{simplex} });
+		%{ $self->{optimizer} });
 	
 	#print Dumper $self;
 
-	# simplex, vars, nec2, goals, filename_nec_csv, filename_nec
+	# opt, vars, nec2, goals, filename_nec_csv, filename_nec
 	return $self;
 }
 
@@ -73,13 +91,13 @@ sub optimize
 {
 	my $self = shift;
 
-	my $result = $self->{simplex}->optimize();
+	my $result = $self->{opt}->optimize();
 
 	# Call one more time to make sure the best result is rendered by xnec2c
-	# in case simplex's last iteration was worse than the best.
-	$self->_xnec2c_optimize_callback($self->{simplex}->get_result_simple());
+	# in case the optimizer's last iteration was worse than the best.
+	$self->_xnec2c_optimize_callback($self->{opt}->get_result_simple());
 
-	return $self->{simplex}->get_result_expanded();
+	return $self->{opt}->get_result_expanded();
 }
 
 sub print_vars
@@ -95,7 +113,7 @@ sub print_vars_initial
 	my $self = shift;
 	print "===== Initial Condition ==== \n";
 
-	print Dumper($self->{simplex}->get_vars_simple) . "\n";
+	print Dumper($self->{opt}->get_vars_simple) . "\n";
 }
 
 sub print_vars_result
@@ -103,21 +121,21 @@ sub print_vars_result
 	my $self = shift;
 	print "===== Result ==== \n";
 
-	print "srand: $self->{simplex}->{'srand'}\n";
+	print "srand: $self->{opt}->{'srand'}\n";
 
-	print Dumper($self->{simplex}->get_result_simple) . "\n";
+	print Dumper($self->{opt}->get_result_simple) . "\n";
 }
 
 sub print_nec2_initial
 {
 	my $self = shift;
-	print $self->{nec2}->($self->{simplex}->get_vars_simple);
+	print $self->{nec2}->($self->{opt}->get_vars_simple);
 }
 
 sub print_nec2_result
 {
 	my $self = shift;
-	print $self->{nec2}->($self->{simplex}->get_result_simple);
+	print $self->{nec2}->($self->{opt}->get_result_simple);
 }
 
 sub print_goal_status
@@ -131,14 +149,14 @@ sub save_nec_initial
 {
 	my $self = shift;
 
-	$self->_xnec2c_optimize_callback($self->{simplex}->get_vars_simple);
+	$self->_xnec2c_optimize_callback($self->{opt}->get_vars_simple);
 }
 
 sub save_nec_result
 {
 	my $self = shift;
 
-	$self->_xnec2c_optimize_callback($self->{simplex}->get_result_simple);
+	$self->_xnec2c_optimize_callback($self->{opt}->get_result_simple);
 }
 
 sub _xnec2c_optimize_callback
@@ -188,10 +206,10 @@ sub _log
 		$status->{cancel} ? 'CANCEL' : 'LOG',
 		$status->{elapsed},
 		$status->{optimization_pass}, $status->{num_passes}, $status->{best_pass},
-		$status->{log_count}, $self->{simplex}->{max_iter},
-		$ssize, $self->{simplex}->{tolerance},
+		$status->{log_count}, $self->{opt}->{max_iter},
+		$ssize, $self->{opt}->{tolerance} // 0,
 		$minima,
-		$status->{prev_minima_count}, $self->{simplex}->{stagnant_minima_count},
+		$status->{prev_minima_count}, $self->{opt}->{stagnant_minima_count},
 		$status->{cache_hits}//0, $status->{cache_misses}//0, 
 		;
 }
@@ -415,7 +433,7 @@ sub _goal_eval_all
 			my $result = $self->_goal_eval_mhz($mhz_range, $vars, $csv, $g);
 
 			# Return a non-pdl scalar value for logging, this is the value used
-			# by simplex to determine the goal:
+			# by the optimizer to determine the goal:
 			$self->{goal_status}->{$g->{name}}{"$mhz_range->[0]-$mhz_range->[1]_spx"} = $result->sclr;
 
 			# Add the result to the final value:
@@ -439,7 +457,7 @@ __END__
 #   	Freq-MHz, Z-real, Z-imag, Z-magn, Z-phase, VSWR, Gain-max, Gain-viewer, F/B Ratio, Direct-tht, Direct-phi
 #
 #   If field is left undefined, then instead of passing field values to the result function
-#   it will pass the current simplex vector and csv so the function can do its
+#   it will pass the current optimized vector and csv so the function can do its
 #   own computation.  This could be used to minimize the length of the antenna.
 #
 # name: an optional field to display the name of the goal
@@ -472,7 +490,7 @@ __END__
 #         worse than lower values.
 #
 #         For values like gain where higher values are better, the value needs to be
-#         inverted for simplex.  The simplest way to do this is to make it negative:
+#         inverted for the optimizer.  The simplest way to do this is to make it negative:
 #            result => sub { my ($gain,$mhz) = @_; return -$gain; }
 #
 #         However you may also create a bias by raising it to a fractional power:
@@ -498,10 +516,10 @@ __END__
 #       avg: add them together and divide by the count
 #       min: return the minimum from the set
 #            Min will return the "best" value across all frequencies, 
-#            so simplex will not work as hard to push it down.
+#            so the optimizer will not work as hard to push it down.
 #       max: return the maximum from the set
 #            Max will return the "worst" value across all frequencies, 
-#            so simplex will work harder to push it down.  Good for VSWR.
+#            so the optimizer will work harder to push it down.  Good for VSWR.
 #       diff: subtract min from max ($max-$min).
 #            This is useful if you want a minimal difference between the two, but the
 #            value itself doesn't matter as much.   For example, if you need VSWR to
