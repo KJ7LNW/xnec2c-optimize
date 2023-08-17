@@ -65,7 +65,7 @@ if ($ARGV[1])
 	die $@ if $@;
 	foreach my $var (keys(%$load))
 	{
-		$config->{vars}{$var}{values} = $load->{$var};
+		$config->{vars}{$var}{values} = $load->{$var}->{values};
 	}
 }
 
