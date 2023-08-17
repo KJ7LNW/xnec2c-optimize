@@ -39,7 +39,7 @@ $SIG{__DIE__} = sub { if ($^S) { die $_[0] }; print "\nDie: $_[0]" . Dumper _bui
 
 if (!@ARGV)
 {
-	print "usage: $0 config-file.conf\n";
+	print "usage: $0 config-file.conf [saved-state-file.save]\n";
 	exit 1;
 }
 
