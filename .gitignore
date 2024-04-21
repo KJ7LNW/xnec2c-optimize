@@ -1,4 +1,5 @@
 /*.nec
 /examples/yagi.nec
+/examples/*.save
 *.csv
 *.sw?
