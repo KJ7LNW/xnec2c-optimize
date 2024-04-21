@@ -45,11 +45,13 @@ if (!@ARGV)
 
 my $filename_config = $ARGV[0];
 my $filename_nec = $ARGV[0];
-my $filename_nec_csv = $ARGV[0];
+my $filename_nec_csv;
 my $filename_save = $ARGV[0];
 
 $filename_nec =~ s/\.conf$//;
 $filename_nec .= ".nec";
+
+my $filename_nec_csv = "$filename_nec.csv";
 
 $filename_save =~ s/\.conf$//;
 $filename_save =  $filename_save . strftime("-%F_%H-%M-%S.save", localtime);
@@ -79,7 +81,7 @@ $xnec2c->print_vars_initial();
 print "===== Writing NEC2 output to $filename_nec =====\n\n";
 
 my $ncpus = `grep -c processor /proc/cpuinfo`; chomp $ncpus;
-print "Open \`xnec2c -j $ncpus $filename_nec\` and select File->Optimizer Output. Optimization will then begin.\n";
+print "Open \`xnec2c -j $ncpus --optimize --write-csv $filename_nec_csv $filename_nec\`.\n";
 
 $xnec2c->save_nec_initial();
 
