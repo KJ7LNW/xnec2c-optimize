@@ -10,15 +10,44 @@ xnec2c-optimize is an optimization framework to tune antenna geometries with
 
 # Examples
 
-## Before:
+## Optimization
+
+### Before:
   - 9.3 - 10.9 dB gain.
   - Huge 23.31 VSWR at 148 MHz, lets fix that.
 ![before xnec2c-optimize](https://github.com/KJ7LNW/xnec2c-optimize/blob/master/examples/yagi-before-xnec2c-optimize.png?raw=true)
 
-## After: 
+### After: 
   - **10.81 - 11.3 dB gain!**
   - **1.25 VSWR, hurray!**  (Note that the graph scale changed)
 ![after xnec2c-optimize](https://github.com/KJ7LNW/xnec2c-optimize/blob/master/examples/yagi-after-xnec2c-optimize.png?raw=true)
+
+## Writing NEC2 files with Perl
+
+From the [2m dipole example](https://github.com/KJ7LNW/xnec2c-optimize/blob/master/examples/dipole-2m.pl):
+
+```perl
+use lib 'lib';
+
+use NEC2;
+
+my $nec = NEC2->new(comment => "half-wave 2-meter dipole");
+
+my $ns = 21; # number of segments
+
+$nec->add(
+        GW( tag => 1, ns => $ns, z2 => 1),
+        EX( ex_tag => 1, ex_seg => int($ns/2) ),
+        RP,
+        NH,
+        NE,
+        FR(mhz_min => 140, mhz_max => 148, n_freq => 10),
+        );
+
+$nec->save('dipole-2m.nec');
+
+print $nec;
+```
 
 # Getting Started
 
