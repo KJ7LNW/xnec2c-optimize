@@ -7,6 +7,7 @@ xnec2c-optimize is an optimization framework to tune antenna geometries with
 
 1. [Before and after graphs](#examples)
 2. [Getting Started](#getting-started)
+3. [Writing NEC2 files with Perl](#writing-nec2-files-with-perl)
 
 # Examples
 
@@ -70,7 +71,12 @@ print $nec;
 
        ./xnec2c-simplex.pl ./examples/yagi.conf
 
-and then open `xnec2c -j NN examples/yagi.nec` where `NN` is the number of CPUs you
+## More detail
+
+Now `xnec2c-simplex` does most of the work below automatically, so here is more information if you need it:
+
+
+Open `xnec2c -j NN examples/yagi.nec` where `NN` is the number of CPUs you
 have available on your system. 
  - From the main window: select View->Frequency Plots
    - From the Frequency Data Plots window: Enable a graph, like VSWR.  Configure whatever you would like to see during optimization.
