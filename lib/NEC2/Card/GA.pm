@@ -27,7 +27,7 @@ use parent 'NEC2::Card';
 sub defaults 
 {
 	# Defaults to 2mm wire, ~12 AWG
-	return (rad => 0.002); 
+	return (rad => 0.002, ang1 => 0, ang2 => 360);
 }
 
 sub param_map
