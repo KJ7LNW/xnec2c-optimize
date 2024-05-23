@@ -74,6 +74,11 @@ sub new
 
 	my $oclass = $self->{_opt_class};
 
+	$self->{fuzz_count} //= 0;
+	$self->{fuzz_range} //= 0.1; # 10%
+	$self->{fuzz_ignore} = { map { $_ => 1 } split('\s*,\s*', $self->{fuzz_ignore}//'') };
+
+	die "fuzz_count cannot be negative" if $self->{fuzz_count} < 0;
 
 	$self->{opt} = $oclass->new(
 		vars => $self->{vars},
@@ -159,30 +164,96 @@ sub save_nec_result
 	$self->_xnec2c_optimize_callback($self->{opt}->get_result_simple);
 }
 
+sub fuzzinate
+{
+	my ($val, $range_pct) = @_;
+
+	if (ref($val) eq 'ARRAY')
+	{
+		return [ map { fuzzinate($_, $range_pct) } @$val ];
+	}
+
+	my $range = $val * $range_pct;
+
+	my $rand = rand();
+
+	my $ret = $val + ($rand*$range*2 - $range);
+
+	my $diff = $ret-$val;
+	#print STDERR "    val=$val range=$range ret=$ret diff=$diff rand=$rand\n";
+
+	return $ret;
+}
+
 sub _xnec2c_optimize_callback
 {
-	my ($self, $vars) = @_;
+	my ($self, $orig_vars) = @_;
 
 	my $filename = $self->{filename_nec_csv};
 
-	my $inotify = Linux::Inotify2->new;
-	if (! -e "$filename" )
+	my @values;
+
+	for (my $i = 0; $i < $self->{fuzz_count}+1; $i++)
 	{
-		open(my $csv, ">", "$filename");
-		close($csv);
+		my $vars;
+
+		if ($i == 0)
+		{
+			$vars = $orig_vars;
+		}
+		else
+		{
+			# randomize around the original
+			foreach my $v (keys(%$orig_vars))
+			{
+				if ($self->{fuzz_ignore}{$v})
+				{
+					# use default values for ignored fields:
+					$vars->{$v} = $orig_vars->{$v};
+					next;
+				}
+
+				$vars->{$v} = fuzzinate($orig_vars->{$v}, $self->{fuzz_range});
+			}
+		}
+
+		#print STDERR "===================== $filename fuzz try $i: ";
+
+		my $inotify = Linux::Inotify2->new;
+		if (! -e "$filename" )
+		{
+			open(my $csv, ">", "$filename");
+			close($csv);
+		}
+		$inotify->watch("$filename", IN_CLOSE_WRITE)
+			or die "inotify: $!: $filename";
+
+		$self->{_last_nec} = $self->{nec2}->($vars);
+
+		# save and wait for the CSV to be written by xnec2c:
+		$self->{_last_nec}->save($self->{filename_nec});
+		$inotify->read;
+
+		my $csv = _load_csv("$filename");
+
+		my $goal = $self->_goal_eval_all($self->{goals}, $vars, $csv);
+
+		#print STDERR "   Goal: $goal\n";
+		#print Dumper($vars);
+
+		push @values, $goal;
 	}
-	$inotify->watch("$filename", IN_CLOSE_WRITE)
-		or die "inotify: $!: $filename";
 
-	$self->{_last_nec} = $self->{nec2}->($vars);
+	my $max;
 
-	# save and wait for the CSV to be written by xnec2c:
-	$self->{_last_nec}->save($self->{filename_nec});
-	$inotify->read;
+	foreach my $v (@values)
+	{
+		$max //= $v;
 
-	my $csv = _load_csv("$filename");
+		$max = $v if ($v > $max);
+	}
 
-	return $self->_goal_eval_all($self->{goals}, $vars, $csv);
+	return $max;
 }
 
 sub _log
