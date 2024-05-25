@@ -42,6 +42,7 @@ use NEC2::Card::GR;
 use NEC2::Card::GS;
 use NEC2::Card::GW;
 use NEC2::Card::GX;
+use NEC2::Card::LD;
 use NEC2::Card::NE;
 use NEC2::Card::NT;
 use NEC2::Card::RP;
