@@ -36,23 +36,22 @@ my $ns = 21; # number of segments
 
 $nec->add(
 	# excitation
-	GW( tag => 1, ns => 1, wire_rad => $d/2, x1 => -$coax_len/2, x2 => -$coax_len/2, z2 => $D/2),
+	GW( tag => 1, ns => 1, wire_rad => $d/2, z2 => $D/2),
 
 	# center conductor
-	GW( tag => 2, ns => $ns, wire_rad => $d/2, x1 => -$coax_len/2, x2 => $coax_len/2),
+	GW( tag => 2, ns => $ns, wire_rad => $d/2, x2 => $coax_len),
 
 	# shielding wires
-	GW( tag => 3, ns => $ns, wire_rad => $d/10, z1 => -$D/2, z2 => -$D/2, x1 => -$coax_len/2, x2 => $coax_len/2),
+	GW( tag => 3, ns => $ns, wire_rad => $d/10, z1 => -$D/2, z2 => -$D/2, x2 => $coax_len),
 	GM( tag_start => 3, nrpt => $nwires-1, rox => 360/$nwires),
 
 	# shielding circles
 	GA( tag => 4, ns => $nwires, wire_rad => $d/10, rada => $D/2),
 	GM( tag_start => 4, roz => 90),
-	GM( tag_start => 4, sx => -$coax_len/2),
 	GM( tag_start => 4, nrpt => $ncircles, sx => $coax_len/$ncircles),
 
 	# terminating resistor
-	GW( tag => 5, ns => 1, wire_rad => $d/2, x1 => $coax_len/2, x2 => $coax_len/2, z2 => $D/2),
+	GW( tag => 5, ns => 1, wire_rad => $d/2, x1 => $coax_len, x2 => $coax_len, z2 => $D/2),
 	LD( ldtag => 5, type => 0, zlr => 50),
 
 	# control cards
