@@ -65,7 +65,7 @@ print $nec;
 
 3. Install the dependencies with this command:
 
-       cpanm PDL::Opt::Simplex::Simple PDL::IO::CSV Linux::Inotify2 Time::HiRes Math::Vector::Real Math::Matrix
+       cpanm PDL::Opt::Simplex::Simple PDL::IO::CSV Linux::Inotify2 Time::HiRes Math::Vector::Real Math::Matrix Math::Trig
 
 4. See `yagi.conf` for an example to get started.   Just run this:
 
