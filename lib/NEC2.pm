@@ -53,6 +53,7 @@ use NEC2::Card::TL;
 use NEC2::Card::ZO;
 
 require NEC2::Polyline;
+require NEC2::Coax;
 
 BEGIN {
 	our @ISA = qw(Exporter);
@@ -71,7 +72,7 @@ BEGIN {
 		qw/ZO Z0/,
 
 		# Perl NEC2 extensions:
-		qw/Polyline/,
+		qw/Polyline Coax/,
 	);
 }
 
@@ -572,5 +573,6 @@ sub Z0 { return NEC2::Card::ZO->new(@_) }  # Charectaristic Impedance (Z-zero al
 
 # Perl NEC2 extensions:
 sub Polyline { return NEC2::Polyline->new(@_) }  # GW card generator
+sub Coax { return NEC2::Coax->new(@_) }          # Coax line
 
 1;
