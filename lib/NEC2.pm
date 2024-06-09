@@ -504,16 +504,6 @@ sub save
 
 	$fn or die "invalid filename: $fn";
 
-	my @intersecting_cards = $self->test_gw_intersections;
-	if (@intersecting_cards)
-	{
-		print "$self" . "\n";
-		use Data::Dumper;
-		print "intersecting_cards: " . Dumper(\@intersecting_cards);
-		exit;
-	}
-
-
 	# Write the outputfile.  The extra flushing is to get the data on disk
 	# before xnec2c opens the file when optimizing.  If it gets a partial
 	# copy it may crash.
